@@ -9,12 +9,12 @@ A website that can do real time theoretical EM 2D projections from an uploaded p
 3. Drag and drop a `.pdb` or `.cif` / `.mmcif` file onto the window, or click **Load PDB**
 
 **Load, drag, and view**
-![6pxm_example](https://github.com/user-attachments/assets/9d3c4371-48e1-4945-bbb5-d40a083c9613)
 
+<img src="https://github.com/user-attachments/assets/9d3c4371-48e1-4945-bbb5-d40a083c9613" width="500"/>
 
 **Hide and show chains and ligands**
-![1bmt_example](https://github.com/user-attachments/assets/969c2d00-a66f-41ec-8ca5-bcf6d5a9ea68)
 
+<img src="https://github.com/user-attachments/assets/969c2d00-a66f-41ec-8ca5-bcf6d5a9ea68" width="500"/>
 
 ## Physics
 
