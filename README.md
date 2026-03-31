@@ -17,7 +17,7 @@ A website that can do real time theoretical EM 2D projections from an uploaded p
 
 ## Physics
 
-**I haven't checked the physics myself yet, I will update the readme file when I am done checking.** I used ChatGPT to check Claude's work and it passed, so I haven't checked it myself yet.
+**I haven't checked all the equations myself yet, I will update the readme file when I am done checking.** I used ChatGPT to check Claude's work and it passed, so I haven't checked it myself yet.
 
 The electron scattering factor of each atom is parameterized as a sum of 5 Gaussians using Peng 1999 tabulated coefficients:
 
