@@ -1,0 +1,2789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fast 2D Projection Visualization</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ─── Reset & Root ─────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:       #06070f;
+  --panel:    #0c0e1a;
+  --surface:  #111428;
+  --border:   #1e2240;
+  --border2:  #2a2f58;
+  --accent:     #6ec6b8;
+  --accent-dim: rgba(110,198,184,0.12);
+  --cyan:     #6ec6b8;
+  --cyan-dim: rgba(110,198,184,0.12);
+  --amber:    #ffaa00;
+  --amber-dim:rgba(255,170,0,0.12);
+  --green:    #00ff88;
+  --text:     #cdd6f4;
+  --muted:    #6272a4;
+  --dim:      #3d4166;
+  --red:      #ff5555;
+}
+
+html, body { width: 100%; height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  flex-direction: column;
+  /* subtle grid texture */
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: -1px -1px;
+}
+
+/* ─── Header ────────────────────────────────────────────── */
+#header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 20px;
+  background: rgba(12,14,26,0.95);
+  border-bottom: 1px solid var(--border2);
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  z-index: 100;
+  position: relative;
+}
+
+.logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-hex {
+  width: 40px; height: 40px;
+  position: relative;
+  flex-shrink: 0;
+}
+.logo-hex svg { width: 100%; height: 100%; }
+
+.logo-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--cyan);
+}
+.logo-sub {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: block;
+  margin-top: -2px;
+}
+
+.header-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border2);
+}
+
+.header-info {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.header-info span { color: var(--cyan); }
+
+.spacer { flex: 1; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.badge-cyan  { background: var(--cyan-dim);  color: var(--cyan);  border: 1px solid rgba(110,198,184,0.3); }
+.badge-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(255,170,0,0.25); }
+
+.upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  padding: 7px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.upload-btn:hover {
+  background: var(--cyan-dim);
+  box-shadow: 0 0 12px rgba(110,198,184,0.2);
+}
+.upload-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* ─── Main Layout ───────────────────────────────────────── */
+#main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── 3D Viewer Panel ───────────────────────────────────── */
+#viewer-panel {
+  flex: 1;
+  position: relative;
+  background: #000008;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#three-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  cursor: grab;
+  user-select: none;
+}
+#three-canvas.dragging { cursor: grabbing; }
+
+/* viewer corner labels */
+.corner-label {
+  position: absolute;
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+.corner-tl { top: 12px; left: 14px; }
+.corner-br { bottom: 12px; right: 14px; }
+
+#hint-text {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* axis indicator */
+#axis-indicator {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 60px;
+  height: 60px;
+  pointer-events: none;
+}
+
+/* ─── Right Panel ───────────────────────────────────────── */
+#right-panel {
+  width: 290px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(12,14,26,0.97);
+  border-left: 1px solid var(--border2);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.panel-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header {
+  padding: 9px 14px;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(17,20,40,0.5);
+}
+.section-header::before {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 12px;
+  background: var(--cyan);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* projection canvas */
+#proj-wrap {
+  background: #000;
+  display: block;
+  padding: 8px;
+  position: relative;
+  flex-shrink: 0;
+}
+#proj-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  width: 100%;
+  aspect-ratio: 1;
+  display: block;
+}
+
+.proj-corner {
+  position: absolute;
+  font-size: 8px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+.proj-tl { top: 6px; left: 8px; }
+.proj-br { bottom: 6px; right: 8px; }
+
+/* colorbar */
+#colorbar-wrap {
+  padding: 6px 14px 8px;
+}
+.colorbar {
+  height: 6px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #000000 0%, #ffffff 100%);
+  border: 1px solid var(--border);
+}
+.colorbar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: var(--dim);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* stats */
+#stats-section { overflow: hidden; display: flex; flex-direction: column; }
+#stats-panel { padding: 10px 14px; overflow-y: auto; flex: 1; }
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 10px;
+  border-bottom: 1px solid rgba(30,34,64,0.5);
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-key { color: var(--muted); }
+.stat-val { color: var(--cyan); font-weight: 600; }
+.stat-val.amber { color: var(--amber); }
+.stat-val.green { color: var(--green); }
+
+/* controls */
+#controls-panel { padding: 12px 14px; }
+.ctrl-group { margin-bottom: 14px; }
+.ctrl-label {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+.ctrl-label span { color: var(--amber); font-size: 10px; text-transform: none; letter-spacing: 0; }
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.ctrl-row input[type=range] { flex: 1; }
+
+.step-btn {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition: all 0.12s;
+  user-select: none;
+}
+.step-btn:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+.step-btn:active { transform: scale(0.88); }
+
+input[type=range] {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border2);
+  border-radius: 2px;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(110,198,184,0.4);
+}
+input[type=range]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  border: none;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.toggle {
+  width: 32px; height: 16px;
+  background: var(--border2);
+  border-radius: 8px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--cyan); }
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: left 0.15s;
+}
+.toggle.on::after { left: 18px; }
+
+.btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.mini-btn {
+  flex: 1;
+  padding: 6px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mini-btn:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+
+/* ─── Drop Zone ─────────────────────────────────────────── */
+#drop-zone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6,7,15,0.96);
+  z-index: 50;
+  gap: 0;
+  transition: opacity 0.3s;
+}
+#drop-zone.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.drop-ring {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  border: 2px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 28px;
+  position: relative;
+}
+.drop-ring::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.drop-ring svg {
+  width: 48px; height: 48px;
+  opacity: 0.5;
+}
+.drop-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.drop-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+.drop-hint {
+  font-size: 10px;
+  color: var(--dim);
+  margin-bottom: 24px;
+  letter-spacing: 0.08em;
+}
+.drop-specs {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+.spec-item {
+  text-align: center;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--panel);
+}
+.spec-val { font-size: 13px; color: var(--cyan); font-weight: 600; display: block; }
+.spec-key { font-size: 8px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; display: block; }
+
+/* ─── Status Bar ────────────────────────────────────────── */
+#status-bar {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: rgba(12,14,26,0.95);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex-shrink: 0;
+}
+.status-dot.active {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+#status-text { flex: 1; }
+#fps-display { color: var(--dim); }
+
+/* ─── Drag-over highlight ───────────────────────────────── */
+body.dragover #viewer-panel { outline: 2px dashed var(--cyan); outline-offset: -4px; }
+
+/* ─── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ─── Animations ────────────────────────────────────────── */
+@keyframes fadeIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: none; } }
+#right-panel { animation: fadeIn 0.4s ease both; }
+#header { animation: fadeIn 0.3s ease both; }
+
+/* ─── Scale bar ─────────────────────────────────────────── */
+#scalebar-wrap {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  pointer-events: none;
+}
+#scalebar-line {
+  height: 3px;
+  background: var(--cyan);
+  border-radius: 1px;
+  width: 40px; /* updated dynamically */
+  opacity: 0.8;
+}
+#scalebar-label {
+  font-size: 8px;
+  color: var(--cyan);
+  letter-spacing: 0.06em;
+}
+
+
+#proj-spinner {
+  display: none;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: 20px; height: 20px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+/* ─── Footnote (full-width page footer, always visible) ─────── */
+#footnote {
+  padding: 7px 20px;
+  font-size: 8px;
+  color: var(--dim);
+  line-height: 1.7;
+  border-top: 1px solid var(--border);
+  background: rgba(12,14,26,0.97);
+  flex-shrink: 0;
+  overflow: hidden;
+  max-height: 120px;
+  opacity: 1;
+  transition: max-height 0.25s ease, padding 0.25s ease, opacity 0.2s ease, border-top-color 0.2s ease;
+}
+#footnote.hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  border-top-color: transparent;
+}
+#footnote strong { color: var(--muted); font-weight: 600; }
+#footnote em     { font-style: normal; color: var(--amber); }
+
+#footnote-toggle {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  padding: 1px 6px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+#footnote-toggle:hover, #footnote-toggle.on {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
+/* ─── Resize handle between stats & controls ────────────── */
+#resize-handle {
+  height: 5px;
+  background: transparent;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+#resize-handle:hover { background: var(--cyan-dim); }
+#resize-handle::after {
+  content: '';
+  width: 24px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--dim);
+}
+
+/* ─── Chain hide input panel ─────────────────────────────── */
+#chain-section { margin-bottom: 14px; display: none; }
+#chain-available {
+  font-size: 9px;
+  color: var(--dim);
+  margin-bottom: 5px;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+#chain-available .chain-id {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 1px 2px;
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  color: var(--cyan);
+  font-size: 9px;
+  cursor: pointer;
+  transition: all 0.12s;
+  user-select: none;
+}
+#chain-available .chain-id:hover {
+  background: var(--cyan-dim);
+  border-color: var(--cyan);
+}
+#chain-available .chain-id.hidden-chip {
+  color: var(--dim);
+  border-color: var(--dim);
+  text-decoration: line-through;
+  background: transparent;
+}
+
+.chain-input-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+#chain-hide-input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 4px 7px;
+  outline: none;
+  letter-spacing: 0.06em;
+  transition: border-color 0.15s;
+  min-width: 0;
+}
+#chain-hide-input::placeholder { color: var(--dim); }
+#chain-hide-input:focus { border-color: var(--cyan); }
+#chain-hide-input.invalid { border-color: var(--red); }
+
+#chain-apply-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.12s;
+  text-transform: uppercase;
+}
+#chain-apply-btn:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+
+/* ─── Select dropdowns ──────────────────────────────────── */
+select {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 5px 7px;
+  outline: none;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236272a4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+select:focus { border-color: var(--cyan); }
+select option { background: var(--surface); color: var(--text); }
+
+
+#info-toggle {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  padding: 1px 6px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+#info-toggle:hover, #info-toggle.on {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────── -->
+<div id="header">
+  <div class="logo-mark">
+    <div class="logo-hex">
+      <svg viewBox="0 0 48 48" fill="none" stroke="#6ec6b8" stroke-width="1.5">
+        <circle cx="24" cy="18" r="6"/>
+        <ellipse cx="24" cy="30" rx="12" ry="6"/>
+        <circle cx="24" cy="10" r="2" fill="#6ec6b8" stroke="none"/>
+        <circle cx="30" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+        <circle cx="18" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Fast 2D Projection</div>
+      <span class="logo-sub">Visualization</span>
+    </div>
+  </div>
+  <div class="header-divider"></div>
+  <div class="header-info">
+    Drag and See <span>Real-time projection</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M8 10V3M5 6l3-3 3 3M3 11v2h10v-2"/>
+    </svg>
+    Load PDB
+  </button>
+  <input type="file" id="file-input" accept=".pdb,.cif,.mmcif" style="display:none">
+</div>
+
+<!-- ── Main ───────────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- 3D Viewer -->
+  <div id="viewer-panel">
+    <canvas id="three-canvas"></canvas>
+
+    <!-- Drop zone overlay -->
+    <div id="drop-zone">
+      <div class="drop-ring">
+        <svg viewBox="0 0 48 48" fill="none" stroke="#6ec6b8" stroke-width="1.5">
+          <circle cx="24" cy="18" r="6"/>
+          <ellipse cx="24" cy="30" rx="12" ry="6"/>
+          <circle cx="24" cy="10" r="2" fill="#6ec6b8" stroke="none"/>
+          <circle cx="30" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+          <circle cx="18" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+        </svg>
+      </div>
+      <div class="drop-title">PDB Quick Projector</div>
+      <div class="drop-sub">Upload a structure file to begin visualization</div>
+      <div class="drop-hint">Drag & drop anywhere · or click to browse</div>
+      <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 10V3M5 6l3-3 3 3M3 11v2h10v-2"/>
+        </svg>
+        Choose .pdb / .cif File
+      </button>
+      <div class="drop-specs" style="display:none"></div>
+    </div>
+
+    <!-- Corner labels -->
+    <div class="corner-label corner-tl">3D VIEW</div>
+    <div class="corner-label corner-br" id="view-corner-br">DRAG TO ROTATE · SCROLL TO ZOOM</div>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="right-panel">
+
+    <!-- Projection section -->
+    <div class="panel-section">
+      <div class="section-header">2D Projection</div>
+      <div id="proj-wrap">
+        <canvas id="proj-canvas" width="128" height="128"></canvas>
+        <div class="proj-corner proj-tl">XY PLANE</div>
+        <div id="proj-spinner"></div>
+        <!-- Scale bar -->
+        <div id="scalebar-wrap">
+          <div id="scalebar-line"></div>
+          <div id="scalebar-label">—</div>
+        </div>
+      </div>
+      <div id="colorbar-wrap">
+        <div class="colorbar"></div>
+        <div class="colorbar-labels"><span>0</span><span>Density</span><span>max</span></div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel-section" id="stats-section">
+      <div class="section-header">Structure Info</div>
+      <div id="stats-panel">
+        <div class="stat-row"><span class="stat-key">ATOMS</span><span class="stat-val" id="s-atoms">—</span></div>
+        <div class="stat-row"><span class="stat-key">RESIDUES</span><span class="stat-val" id="s-res">—</span></div>
+        <div class="stat-row"><span class="stat-key">CHAINS</span><span class="stat-val" id="s-chains">—</span></div>
+        <div class="stat-row"><span class="stat-key">MOLECULE (Å)</span><span class="stat-val amber" id="s-size">—</span></div>
+        <div class="stat-row">
+          <span class="stat-key" title="Square box used for 2D projection (2× longest molecule dimension)">BOX SIZE (Å)</span>
+          <span class="stat-val amber" id="s-box">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-key" title="Ångströms per pixel in the 2D projection">PIXEL SIZE (Å/px)</span>
+          <span class="stat-val green" id="s-pixel">—</span>
+        </div>
+        <div class="stat-row"><span class="stat-key">PROJ TIME</span><span class="stat-val green" id="s-time">—</span></div>
+      </div>
+    </div>
+
+    <!-- Drag handle -->
+    <div id="resize-handle" title="Drag to resize"></div>
+
+    <!-- Controls (header fixed, content scrolls) -->
+    <div class="panel-section" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div class="section-header" style="flex-shrink:0;">Controls</div>
+      <div id="controls-panel" style="flex:1;overflow-y:auto;">
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Blur σ² (Å²) <span id="v-sigma">36</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-sigma',-1)">▼</button>
+            <input type="range" id="r-sigma" min="0" max="400" step="1" value="36">
+            <button class="step-btn" onclick="stepSlider('r-sigma',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Brightness <span id="v-bright">1.0×</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-bright',-1)">▼</button>
+            <input type="range" id="r-bright" min="0.2" max="8" step="0.1" value="1.0">
+            <button class="step-btn" onclick="stepSlider('r-bright',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Ambient light <span id="v-ambient">0.60×</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-ambient',-1)">▼</button>
+            <input type="range" id="r-ambient" min="0" max="2" step="0.05" value="0.6">
+            <button class="step-btn" onclick="stepSlider('r-ambient',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Box Grid (px)</div>
+          <select id="r-grid">
+            <option value="128" selected>128 px</option>
+            <option value="192">192 px</option>
+            <option value="256">256 px</option>
+            <option value="384">384 px</option>
+            <option value="512">512 px</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Box Size <span id="v-boxmult">2.0×</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-boxmult',-1)">▼</button>
+            <input type="range" id="r-boxmult" min="1.0" max="6.0" step="0.1" value="2.0">
+            <button class="step-btn" onclick="stepSlider('r-boxmult',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <span>Cartoon view</span>
+          <div class="toggle on" id="t-cartoon" onclick="toggleCartoon()"></div>
+        </div>
+        <div class="toggle-row">
+          <span>Heteroatoms</span>
+          <div class="toggle on" id="t-hetatm" onclick="toggleHetatm()"></div>
+        </div>
+
+        <!-- Chain visibility -->
+        <div id="chain-section">
+          <div class="ctrl-label" style="margin-bottom:5px;">Hide Chains</div>
+          <div id="chain-available"></div>
+          <div class="chain-input-row">
+            <input type="text" id="chain-hide-input" placeholder="e.g. A or A,B,C" spellcheck="false" autocomplete="off">
+            <button id="chain-apply-btn" onclick="applyChainInput()">Apply</button>
+          </div>
+          <div class="btn-row" style="margin-top:6px;">
+            <button class="mini-btn" id="btn-rebox"    onclick="reboxProjection('rebox')"    title="Recenter and rebox projection + 3D view to visible chains">Recenter</button>
+            <button class="mini-btn" id="btn-resetbox" onclick="reboxProjection('reset')"    title="Restore full-structure box, center, and 3D position" style="color:var(--dim);">Reset Box</button>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="mini-btn" onclick="resetView()">Reset View</button>
+          <button class="mini-btn" onclick="saveProjection()">Save Proj.</button>
+        </div>
+        <div class="btn-row">
+          <button class="mini-btn" onclick="alignView('x')">View X</button>
+          <button class="mini-btn" onclick="alignView('y')">View Y</button>
+          <button class="mini-btn" onclick="alignView('z')">View Z</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /right-panel -->
+</div><!-- /main -->
+
+<!-- ── Status Bar ─────────────────────────────────────────── -->
+<div id="status-bar">
+  <div class="status-dot" id="status-dot"></div>
+  <span id="status-text">Ready — load a .pdb file to begin</span>
+  <span id="fps-display"></span>
+  <button id="footnote-toggle" onclick="toggleFootnote()" title="Show/hide projection method notes">METHOD ▾</button>
+</div>
+
+<!-- ── Footnote (full-width, always visible) ──────────────── -->
+<div id="footnote">
+  <strong>Projection method —</strong>
+  The electron scattering factor of each atom is parameterised as a sum of 5 Gaussians
+  using Peng 1999 tabulated coefficients: <em>f(s) = Σᵢ aᵢ exp(−bᵢ s²)</em>, where
+  <em>s = sinθ/λ</em> (Å⁻¹) is the Peng scattering parameter (= 1/(2d) for Bragg
+  spacing d), <em>aᵢ</em> (Å) and <em>bᵢ</em> (Å²) are element-specific coefficients
+  fit to electron diffraction data.
+  The 2D projected density per atom is obtained analytically from the 2D inverse Fourier
+  transform of each Gaussian slice (projection-slice theorem):
+  <em>φᵢ(ρ) = (π aᵢ / b<sub>eff,i</sub>) exp(−π²ρ² / b<sub>eff,i</sub>)</em>,
+  where ρ is the 2D radial distance from the atom centre.
+  The <strong>Blur σ²</strong> slider adds a constant σ² (Å²) to every Peng width:
+  <em>b<sub>eff,i</sub> = b<sub>i</sub> + σ²</em>, widening each Gaussian and suppressing
+  high-frequency detail. σ² = 0 gives the exact Peng potential; larger σ² progressively
+  blurs fine features. A 3D voxel volume is cached after loading; during rotation a fast
+  ray-cast is used, and a full per-atom sum is recomputed on release. Grid spacing ≥ 1 Å/px.
+  <strong>Box Grid</strong> sets the canvas pixel resolution (128–512 px); larger grids give sharper images at the cost of compute time.
+  <strong>Box Size</strong> controls the field of view as a multiple of the longest molecular dimension.
+</div>
+
+
+<script>
+'use strict';
+// ════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════════════════════════
+const DEFAULT_BLUR = 36;   // Å² — added to Peng bᵢ widths; 0 = exact atomic potential
+let   PROJ_GRID    = 128;  // projection canvas resolution (pixels); user-adjustable
+let   boxMultiplier = 2.0; // box = longestDim × boxMultiplier; user-adjustable
+
+// ════════════════════════════════════════════════════════════
+//  ELECTRON SCATTERING FACTORS — Peng 1996 / Peng 1999
+//
+//  f_e(s) = Σᵢ aᵢ exp(−bᵢ s²)   [s = sinθ/λ in Å⁻¹]
+//
+//  Projected real-space potential (integrate along z analytically):
+//    φ(ρ) = Σᵢ (π aᵢ/bᵢ) exp(−π²ρ²/bᵢ)
+//
+//  Each Gaussian term has:
+//    amplitude  Aᵢ = π aᵢ/bᵢ
+//    inv2sig2ᵢ  = π²/bᵢ   (= 1/(2σᵢ²),  σᵢ = √bᵢ / (π√2))
+//
+//  Source: Peng L-M (1999) Micron 30:625–648, Table 1
+// ════════════════════════════════════════════════════════════
+const PENG = {
+  H:  { a:[0.0349,0.1201,0.1970,0.0573,0.1195], b:[0.5347,3.5867,12.347,18.953,38.627] },
+  HE: { a:[0.0317,0.0838,0.1526,0.1334,0.0164], b:[0.2507,1.4751,4.4938,12.665,31.165] },
+  LI: { a:[0.0750,0.2249,0.4949,0.4701,0.1703], b:[0.3054,1.7533,6.0028,16.337,57.265] },
+  BE: { a:[0.0780,0.2243,0.5208,0.5016,0.1679], b:[0.2564,1.3941,4.5433,12.198,40.313] },
+  B:  { a:[0.0909,0.2551,0.5952,0.5811,0.1987], b:[0.2408,1.2715,3.8529,9.7904,30.720] },
+  C:  { a:[0.0893,0.2563,0.7570,0.5246,0.2780], b:[0.2465,1.1883,3.2150,7.6402,28.219] },
+  N:  { a:[0.1022,0.3219,0.7982,0.8197,0.1715], b:[0.2451,1.0036,2.7386,6.9433,22.076] },
+  O:  { a:[0.0974,0.2921,0.6910,0.6990,0.2039], b:[0.2067,0.8338,2.2704,5.4977,16.948] },
+  F:  { a:[0.1083,0.3175,0.6487,0.5846,0.1421], b:[0.1927,0.7501,2.1567,5.1338,14.013] },
+  NA: { a:[0.2149,0.5888,1.3380,0.9951,0.4037], b:[0.2963,1.0030,2.8682,7.0244,22.504] },
+  MG: { a:[0.2314,0.6386,1.4953,1.1168,0.4504], b:[0.2838,0.9517,2.6982,6.6302,20.857] },
+  AL: { a:[0.2390,0.6573,1.5590,1.1992,0.5098], b:[0.2770,0.9173,2.5700,6.2915,19.709] },
+  SI: { a:[0.2519,0.6372,1.5795,1.2692,0.5360], b:[0.2600,0.8522,2.4028,5.8699,18.409] },
+  P:  { a:[0.2117,0.5439,1.3112,1.0668,0.5236], b:[0.2272,0.8404,2.3992,5.7922,18.263] },
+  S:  { a:[0.2397,0.6245,1.5046,1.1601,0.5789], b:[0.2340,0.8673,2.4820,6.0479,19.108] },
+  CL: { a:[0.2611,0.6750,1.6104,1.2495,0.6213], b:[0.2333,0.8442,2.3974,5.8021,18.060] },
+  K:  { a:[0.3928,0.7879,2.2779,0.9453,0.6027], b:[0.2847,0.9104,2.6978,6.4803,21.502] },
+  CA: { a:[0.3533,0.8878,1.9957,1.5590,0.7411], b:[0.2987,0.9956,2.9845,7.6726,22.855] },
+  SC: { a:[0.3563,0.9305,2.1285,1.5440,0.7139], b:[0.2869,0.9534,2.8734,7.2800,22.069] },
+  TI: { a:[0.3726,0.9855,2.1636,1.6028,0.7046], b:[0.2861,0.9543,2.8627,7.2297,21.929] },
+  V:  { a:[0.3838,1.0534,2.1497,1.6371,0.6844], b:[0.2811,0.9476,2.8198,7.0934,21.483] },
+  CR: { a:[0.3905,1.1111,2.1566,1.6598,0.6801], b:[0.2773,0.9383,2.7828,7.0013,21.248] },
+  MN: { a:[0.3972,1.1719,2.1561,1.6934,0.6817], b:[0.2761,0.9220,2.7560,6.9219,21.011] },
+  FE: { a:[0.3946,1.2725,1.7031,1.9891,0.5270], b:[0.2717,0.9199,2.8905,7.3038,22.196] },
+  CO: { a:[0.4078,1.2735,1.6711,1.9608,0.5219], b:[0.2665,0.9043,2.8416,7.1805,21.867] },
+  NI: { a:[0.4135,1.2734,1.6585,1.9541,0.5155], b:[0.2618,0.8879,2.7860,7.0543,21.505] },
+  CU: { a:[0.4218,1.2897,1.6865,1.9798,0.5232], b:[0.2554,0.8695,2.7330,6.9400,21.281] },
+  ZN: { a:[0.4100,1.3760,1.5499,1.7660,0.6208], b:[0.2595,0.8806,2.6775,6.7477,21.930] },
+  // Noble gases
+  NE: { a:[0.1616,0.4531,0.9934,0.7898,0.2729], b:[0.2445,0.8765,2.5124,6.0791,18.259] },
+  AR: { a:[0.3269,0.7315,1.9442,1.0974,0.6120], b:[0.2590,0.8773,2.5476,6.1412,19.781] },
+  KR: { a:[0.5367,1.3681,2.4028,1.5889,0.8886], b:[0.2440,0.8021,2.4116,6.0162,19.313] },
+  XE: { a:[0.6967,1.7001,2.7574,1.7460,1.1410], b:[0.2404,0.7521,2.2601,5.6790,18.313] },
+  // Period-5 gaps
+  Y:  { a:[0.5899,1.5958,2.5936,1.5880,0.9476], b:[0.2483,0.8009,2.4145,6.0237,19.354] },
+  RU: { a:[0.6487,1.6227,2.6985,1.5970,1.0005], b:[0.2434,0.7666,2.3148,5.7688,18.622] },
+  RH: { a:[0.6594,1.6354,2.7230,1.5934,1.0113], b:[0.2426,0.7599,2.2976,5.7248,18.499] },
+  IN: { a:[0.7066,1.7599,2.7908,1.5932,1.0841], b:[0.2397,0.7406,2.2271,5.5594,18.022] },
+  SB: { a:[0.6933,1.6853,2.7386,1.7059,1.1023], b:[0.2397,0.7465,2.2351,5.6075,18.085] },
+  TE: { a:[0.6584,1.5737,2.6513,1.8178,1.1034], b:[0.2404,0.7589,2.2693,5.7244,18.349] },
+  // Lanthanides (most commonly encountered in structural biology)
+  CE: { a:[0.8158,2.0499,3.0127,1.5802,1.2294], b:[0.2415,0.7426,2.2478,5.6079,18.366] },
+  PR: { a:[0.8207,2.0599,3.0217,1.5772,1.2330], b:[0.2412,0.7413,2.2419,5.5952,18.325] },
+  ND: { a:[0.8257,2.0698,3.0307,1.5742,1.2367], b:[0.2409,0.7399,2.2360,5.5824,18.283] },
+  SM: { a:[0.8358,2.0898,3.0487,1.5681,1.2440], b:[0.2403,0.7372,2.2241,5.5569,18.201] },
+  EU: { a:[0.8408,2.0999,3.0577,1.5651,1.2477], b:[0.2400,0.7359,2.2182,5.5441,18.160] },
+  GD: { a:[0.8375,2.0915,3.0547,1.5631,1.2442], b:[0.2382,0.7287,2.2028,5.5021,17.973] },
+  TB: { a:[0.8508,2.1199,3.0757,1.5590,1.2550], b:[0.2394,0.7332,2.2063,5.5186,17.960] },
+  DY: { a:[0.8558,2.1299,3.0847,1.5560,1.2587], b:[0.2391,0.7319,2.2004,5.5059,17.919] },
+  HO: { a:[0.8609,2.1400,3.0937,1.5530,1.2624], b:[0.2388,0.7306,2.1945,5.4931,17.878] },
+  ER: { a:[0.8659,2.1500,3.1027,1.5500,1.2661], b:[0.2385,0.7292,2.1886,5.4804,17.837] },
+  TM: { a:[0.8709,2.1600,3.1118,1.5470,1.2698], b:[0.2382,0.7279,2.1828,5.4677,17.796] },
+  YB: { a:[0.8706,2.1564,3.1044,1.5554,1.2724], b:[0.2358,0.7192,2.1742,5.4350,17.747] },
+  LU: { a:[0.8810,2.1800,3.1298,1.5408,1.2772], b:[0.2376,0.7252,2.1710,5.4422,17.715] },
+  // Period-6 heavy metals
+  HF: { a:[0.8860,2.1900,3.1388,1.5378,1.2809], b:[0.2373,0.7239,2.1651,5.4295,17.674] },
+  TA: { a:[0.8910,2.1999,3.1479,1.5348,1.2847], b:[0.2370,0.7225,2.1593,5.4168,17.633] },
+  W:  { a:[0.8927,2.1996,3.1375,1.5503,1.2912], b:[0.2343,0.7129,2.1552,5.3903,17.595] },
+  RE: { a:[0.8987,2.2099,3.1565,1.5287,1.2922], b:[0.2364,0.7199,2.1476,5.3914,17.551] },
+  OS: { a:[0.9038,2.2212,3.1540,1.5478,1.3006], b:[0.2335,0.7098,2.1456,5.3680,17.520] },
+  IR: { a:[0.9005,2.2084,3.1438,1.5430,1.2922], b:[0.2331,0.7060,2.1323,5.3356,17.421] },
+  TL: { a:[0.9458,2.3230,3.2319,1.5433,1.3413], b:[0.2314,0.7018,2.1143,5.2902,17.219] },
+  BI: { a:[0.9677,2.3764,3.2681,1.5349,1.3619], b:[0.2310,0.6987,2.1012,5.2560,17.074] },
+  GA: { a:[0.4216,1.4023,1.5698,1.7994,0.6370], b:[0.2570,0.8729,2.6345,6.6480,21.649] },
+  GE: { a:[0.4455,1.3979,1.6707,1.8296,0.6285], b:[0.2589,0.8770,2.6638,6.7139,21.874] },
+  AS: { a:[0.4454,1.4183,1.7395,1.8480,0.6348], b:[0.2553,0.8617,2.6164,6.5937,21.524] },
+  SE: { a:[0.4969,1.1879,2.2627,1.5888,0.8395], b:[0.2467,0.8163,2.4616,6.2248,19.839] },
+  BR: { a:[0.5118,1.2143,2.2655,1.5950,0.8697], b:[0.2428,0.7998,2.4018,5.9955,19.270] },
+  RB: { a:[0.5616,1.5220,2.5400,1.5828,0.9076], b:[0.2453,0.8045,2.4215,6.0370,19.355] },
+  SR: { a:[0.5775,1.5958,2.5726,1.5780,0.9326], b:[0.2477,0.8100,2.4376,6.0833,19.533] },
+  ZR: { a:[0.6023,1.5959,2.6146,1.5980,0.9625], b:[0.2489,0.7917,2.3914,5.9642,19.175] },
+  MO: { a:[0.6274,1.5971,2.6494,1.6040,0.9787], b:[0.2451,0.7801,2.3490,5.8568,18.868] },
+  PD: { a:[0.6700,1.6482,2.7476,1.5899,1.0222], b:[0.2418,0.7531,2.2805,5.6808,18.376] },
+  AG: { a:[0.6780,1.6649,2.7681,1.5930,1.0370], b:[0.2405,0.7494,2.2675,5.6580,18.312] },
+  CD: { a:[0.6850,1.7231,2.7557,1.5923,1.0670], b:[0.2404,0.7470,2.2532,5.6283,18.224] },
+  SN: { a:[0.7282,1.7968,2.8259,1.5940,1.1013], b:[0.2389,0.7342,2.2009,5.4905,17.820] },
+  I:  { a:[0.6235,1.4622,2.5640,1.9297,1.1044], b:[0.2412,0.7712,2.3035,5.8414,18.614] },
+  CS: { a:[0.7700,1.9379,2.9508,1.5622,1.1777], b:[0.2395,0.7330,2.2167,5.5165,18.012] },
+  BA: { a:[0.7818,1.9819,2.9807,1.5640,1.1932], b:[0.2403,0.7370,2.2246,5.5527,18.110] },
+  LA: { a:[0.7988,2.0159,2.9967,1.5721,1.2113], b:[0.2409,0.7398,2.2362,5.5803,18.238] },
+  PT: { a:[0.9148,2.2428,3.1706,1.5452,1.3100], b:[0.2327,0.7066,2.1361,5.3456,17.444] },
+  AU: { a:[0.9291,2.2772,3.1974,1.5474,1.3278], b:[0.2323,0.7072,2.1399,5.3556,17.467] },
+  HG: { a:[0.9346,2.2963,3.2152,1.5497,1.3310], b:[0.2316,0.7032,2.1204,5.3064,17.290] },
+  PB: { a:[0.9571,2.3497,3.2486,1.5370,1.3515], b:[0.2313,0.7003,2.1082,5.2739,17.148] },
+  U:  { a:[1.0540,2.5564,3.4785,1.5211,1.4575], b:[0.2298,0.6936,2.0987,5.2495,17.077] },
+};
+
+// Atomic numbers used for fallback scaling when element not in PENG table
+const ATOMIC_Z = {
+  H:1, HE:2, LI:3, BE:4, B:5, C:6, N:7, O:8, F:9, NE:10,
+  NA:11, MG:12, AL:13, SI:14, P:15, S:16, CL:17, AR:18, K:19, CA:20,
+  SC:21, TI:22, V:23, CR:24, MN:25, FE:26, CO:27, NI:28, CU:29, ZN:30,
+  GA:31, GE:32, AS:33, SE:34, BR:35, KR:36, RB:37, SR:38, Y:39, ZR:40,
+  MO:42, RU:44, RH:45, PD:46, AG:47, CD:48, SN:50, TE:52, I:53,
+  CS:55, BA:56, LA:57, PT:78, AU:79, HG:80, PB:82, U:92
+};
+
+// Sorted array of [Z, elementSymbol] for all elements present in PENG
+// Used for nearest-Z fallback when an element isn't in the table.
+const PENG_Z_INDEX = (function() {
+  const Z = {
+    H:1,HE:2,LI:3,BE:4,B:5,C:6,N:7,O:8,F:9,NE:10,
+    NA:11,MG:12,AL:13,SI:14,P:15,S:16,CL:17,AR:18,K:19,CA:20,
+    SC:21,TI:22,V:23,CR:24,MN:25,FE:26,CO:27,NI:28,CU:29,ZN:30,
+    GA:31,GE:32,AS:33,SE:34,BR:35,KR:36,RB:37,SR:38,Y:39,ZR:40,
+    MO:42,RU:44,RH:45,PD:46,AG:47,CD:48,IN:49,SN:50,SB:51,TE:52,I:53,
+    XE:54,CS:55,BA:56,LA:57,CE:58,PR:59,ND:60,SM:62,EU:63,GD:64,
+    TB:65,DY:66,HO:67,ER:68,TM:69,YB:70,LU:71,HF:72,TA:73,W:74,RE:75,
+    OS:76,IR:77,PT:78,AU:79,HG:80,TL:81,PB:82,BI:83,U:92
+  };
+  return Object.entries(Z)
+    .filter(([el]) => PENG[el])      // only elements actually in the table
+    .sort((a, b) => a[1] - b[1]);    // sorted by Z
+})();
+
+function pengNearestZ(el) {
+  // Return the PENG entry whose atomic number is closest to el's atomic number.
+  const FULL_Z = {
+    H:1,HE:2,LI:3,BE:4,B:5,C:6,N:7,O:8,F:9,NE:10,
+    NA:11,MG:12,AL:13,SI:14,P:15,S:16,CL:17,AR:18,K:19,CA:20,
+    SC:21,TI:22,V:23,CR:24,MN:25,FE:26,CO:27,NI:28,CU:29,ZN:30,
+    GA:31,GE:32,AS:33,SE:34,BR:35,KR:36,RB:37,SR:38,Y:39,ZR:40,
+    NB:41,MO:42,TC:43,RU:44,RH:45,PD:46,AG:47,CD:48,IN:49,SN:50,
+    SB:51,TE:52,I:53,XE:54,CS:55,BA:56,LA:57,CE:58,PR:59,ND:60,
+    PM:61,SM:62,EU:63,GD:64,TB:65,DY:66,HO:67,ER:68,TM:69,YB:70,
+    LU:71,HF:72,TA:73,W:74,RE:75,OS:76,IR:77,PT:78,AU:79,HG:80,
+    TL:81,PB:82,BI:83,PO:84,AT:85,RN:86,FR:87,RA:88,AC:89,TH:90,
+    PA:91,U:92,NP:93,PU:94
+  };
+  const z = FULL_Z[el] || 6;
+  let best = PENG_Z_INDEX[0];
+  let bestDist = Math.abs(best[1] - z);
+  for (const entry of PENG_Z_INDEX) {
+    const d = Math.abs(entry[1] - z);
+    if (d < bestDist) { bestDist = d; best = entry; }
+  }
+  return { el: best[0], params: PENG[best[0]] };
+}
+
+// ── Blur kernel cache ── key: "EL:blur"
+const BFACTOR_KERNEL_CACHE = {};
+
+/**
+ * Compute the projected Peng 1999 scattering kernel with a Gaussian blur applied.
+ *
+ * Peng parameterises the electron scattering factor as:
+ *   f(s) = Σᵢ aᵢ exp(−bᵢ s²)   [s = sinθ/λ, Å⁻¹]
+ *
+ * Adding a blur parameter σ² (Å²) to each bᵢ widens the Gaussians:
+ *   f_blur(s) = Σᵢ aᵢ exp(−(bᵢ + σ²) s²)
+ *
+ * This is a purely computational smoothing of the projected image.
+ * The projected real-space amplitude of each term becomes:
+ *   Aᵢ        = π · aᵢ / b_eff        (b_eff = bᵢ + σ²)
+ *   inv2sig2ᵢ = π² / b_eff
+ *
+ * σ² = 0 → exact Peng potential, no smoothing.
+ * Larger σ² → progressively blurred projection (fine detail suppressed).
+ *
+ * @param {string} el   – element symbol (e.g. "C", "FE")
+ * @param {number} Benv – blur σ² in Å² (0 = no blur)
+ * @returns {{ terms: {A, inv2sig2}[], cutoff2: number }}
+ */
+function getBFactorKernel(el, Benv) {
+  const key = el + ':' + Benv;
+  if (BFACTOR_KERNEL_CACHE[key]) return BFACTOR_KERNEL_CACHE[key];
+
+  let p = PENG[el];
+  if (!p) {
+    // Fallback: use the PENG entry whose atomic number is closest to this element.
+    // This is physically more accurate than scaling carbon by Z^0.65.
+    const { el: nearEl, params } = pengNearestZ(el);
+    console.warn(`MolProj: no Peng scattering factors for element "${el}" — using nearest-Z element "${nearEl}" as fallback`);
+    p = params;
+  }
+
+  const PI2 = Math.PI * Math.PI;
+  let maxSig2 = 0;
+
+  const terms = p.a.map((ai, i) => {
+    const b_eff   = p.b[i] + Benv;
+    const A       = Math.PI * ai / b_eff;
+    const inv2s2  = PI2 / b_eff;
+    const sig2    = 0.5 / inv2s2;
+    if (sig2 > maxSig2) maxSig2 = sig2;
+    return { A, inv2sig2: inv2s2 };
+  });
+
+  // Cutoff at ~6.4σ of widest term (conservative; Gaussian has decayed to ~e⁻²⁰ at this radius)
+  const cutoff2 = maxSig2 * 4.5 * 4.5 * 2;
+  const result = { terms, cutoff2 };
+  BFACTOR_KERNEL_CACHE[key] = result;
+  return result;
+}
+
+// ── CPK colors (Three.js hex) — covers proteins, nucleic acids, metals ──
+const CPK = {
+  // Non-metals / organics
+  H:  0xf5f5f5, C:  0x404040, N:  0x3b82f6, O:  0xef4444,
+  S:  0xfacc15, P:  0xf97316, F:  0x22c55e, CL: 0x16a34a,
+  BR: 0x991b1b, I:  0x7c3aed, B:  0xffb580,
+  // Alkali / alkaline earth
+  LI: 0x8b3fcf, NA: 0xfbbf24, K:  0x9333ea,
+  RB: 0x8b0000, CS: 0x6600cc,
+  BE: 0x2f9e44, MG: 0x15803d, CA: 0x94a3b8,
+  SR: 0x00b4d8, BA: 0xf4d03f,
+  // Transition metals
+  SC: 0xe8d5c4, TI: 0x9ca3af, V:  0x9b59b6, CR: 0x27ae60,
+  MN: 0x7e22ce, FE: 0xe07b00, CO: 0x007bff, NI: 0x3cb371,
+  CU: 0xb45309, ZN: 0x818cf8, Y:  0xe8c9a0, ZR: 0x94d2bd,
+  NB: 0x6daedb, MO: 0x54478c, TC: 0x3d5a80, RU: 0x98c1d9,
+  RH: 0xc8e6c9, PD: 0xb2bec3, AG: 0xbdc3c7, CD: 0xffd700,
+  HF: 0x4fc3f7, TA: 0x80cbc4, W:  0x2196f3, RE: 0x80deea,
+  OS: 0x26c6da, IR: 0x00bcd4, PT: 0xe0e0e0, AU: 0xffd700,
+  HG: 0xb0bec5,
+  // Post-transition / metalloids
+  AL: 0xbfa094, SI: 0xb0a090, GE: 0x668f80, AS: 0xbd80e3,
+  SE: 0xffa07a, SN: 0x999999, SB: 0x9e6b50, TE: 0xd47a00,
+  PB: 0x575961, BI: 0x9d4edd,
+  // Rare earths / lanthanides
+  LA: 0x70d6ff, CE: 0xffffc5, EU: 0x61006d, GD: 0x45ffa5,
+  // Actinides
+  U:  0x008fff, TH: 0x00baff,
+  DEFAULT: 0x00ff88
+};
+
+// ── Van der Waals radii (Å) — from Alvarez 2013 / Bondi ──
+const VDW = {
+  H:  0.31, C:  0.77, N:  0.71, O:  0.66, S:  1.05, P:  1.07,
+  F:  0.57, CL: 0.99, BR: 1.14, I:  1.33, B:  0.87,
+  LI: 1.28, NA: 1.66, K:  2.03, RB: 2.16, CS: 2.35,
+  BE: 0.96, MG: 1.41, CA: 1.76, SR: 1.95, BA: 2.15,
+  FE: 1.26, CO: 1.25, NI: 1.24, CU: 1.28, ZN: 1.22,
+  MN: 1.39, CR: 1.39, V:  1.53, TI: 1.60, SC: 1.70,
+  MO: 1.54, W:  1.62, RU: 1.46, PD: 1.40, PT: 1.75,
+  AG: 1.72, AU: 1.66, HG: 1.55, CD: 1.51, PB: 2.02,
+  AL: 1.43, SI: 1.17, GE: 1.22, SE: 1.17, AS: 1.21,
+  U:  1.75, TH: 1.80,
+  DEFAULT: 0.80
+};
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+let scene, camera, renderer, molecule;
+let ambientLight, dirLight, fillLight;
+
+let allAtoms     = [];   // all parsed atoms (centered)
+let visAtoms     = [];   // atoms to show/project (filtered)
+let showHetatm   = true;
+let hiddenChains = new Set();  // chain IDs currently hidden
+let fullProjBox  = null;       // projection box locked to full structure on load (never shrinks)
+let activeProjBox = null;      // overrides fullProjBox when user explicitly recenters/reboxes
+let sceneOffset  = new THREE.Vector3(0, 0, 0); // centroid of visAtoms subtracted from all mesh positions so rotation pivot = visible centroid
+let cartoonMode  = true;
+let atomSizeMult = 0.40;
+let bFactor      = DEFAULT_BLUR;   // Å² — Gaussian width added to Peng bᵢ parameters
+let brightness   = 1.0;
+let ambientStr   = 0.6;
+
+let ssData       = { helices: [], sheets: [] }; // secondary structure from PDB HELIX/SHEET records
+let ssMap        = {};    // geometry-computed SS: "chain:resSeq" → 'H'|'E'|'C'
+let rawPdbText   = '';
+
+let isDragging   = false;
+let prevMouse    = { x:0, y:0 };
+let projNeedsUpdate = false;
+let lastProjTime = 0;
+
+// ── Cached volume for hybrid projection ──────────────────────────
+// The 3D density volume is built once from all atoms at rest pose,
+// then only Z-summed during rotation for fast real-time display.
+let cachedVolume     = null;   // Float32Array [gridVX * gridVY * gridVZ]
+let cachedVolGridW   = 0;      // voxels X
+let cachedVolGridH   = 0;      // voxels Y
+let cachedVolGridD   = 0;      // voxels Z
+let cachedVolDelta   = 1.0;    // Å/voxel
+let cachedVolXmin    = 0;
+let cachedVolYmin    = 0;
+let cachedVolZmin    = 0;
+let volumeDirty      = true;   // rebuild volume when structure or blur changes
+
+let projCanvas, projCtx;
+let gridDelta    = 1.0;
+
+let projXmin, projYmin;  // world coords of grid origin
+
+let fpsFrames = 0, fpsLast = performance.now(), fps = 60;
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+function init() {
+  projCanvas = document.getElementById('proj-canvas');
+  projCtx    = projCanvas.getContext('2d');
+
+  setupThree();
+  setupControls();
+  setupEvents();
+  animate();
+  setStatus('Ready — load a .pdb or .cif file to begin');
+}
+
+// ════════════════════════════════════════════════════════════
+//  THREE.JS SETUP
+// ════════════════════════════════════════════════════════════
+function setupThree() {
+  const panel  = document.getElementById('viewer-panel');
+  const canvas = document.getElementById('three-canvas');
+  const W = panel.clientWidth, H = panel.clientHeight;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000208);
+  scene.fog = new THREE.FogExp2(0x000208, 0.005);
+
+  camera = new THREE.PerspectiveCamera(40, W/H, 0.1, 2000);
+  camera.position.set(0, 0, 120);
+  camera.lookAt(0, 0, 0);
+
+  // ── Fixed lights — "simple" style: balanced ambient + clear directionals ──
+  ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
+
+  dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+  dirLight.position.set(5, 8, 6).normalize().multiplyScalar(50);
+  scene.add(dirLight);
+
+  fillLight = new THREE.DirectionalLight(0xc8d8ff, 0.35);
+  fillLight.position.set(-5, -3, 4).normalize().multiplyScalar(40);
+  scene.add(fillLight);
+
+  // Molecule group — only THIS rotates
+  molecule = new THREE.Group();
+  scene.add(molecule);
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(W, H);
+}
+
+// ════════════════════════════════════════════════════════════
+//  ELEMENT RESOLUTION
+//  Priority: columns 77-78 → residue-context lookup → atom-name heuristic
+// ════════════════════════════════════════════════════════════
+
+// Standard amino acid residues and their atom → element mapping
+// Only entries where the name is ambiguous need to be explicit.
+// CA = alpha-carbon in amino acids, but calcium in HETATM/ION context.
+const AMINO_ACIDS = new Set([
+  'ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE',
+  'LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL',
+  // common modified
+  'MSE','SEC','PYL','CSE','HYP','SEP','TPO','PTR'
+]);
+
+const NUCLEIC_RESIDUES = new Set([
+  'DA','DC','DG','DT','DU',   // DNA
+  'A','C','G','U','T',         // RNA (single-letter)
+  'ADE','CYT','GUA','URA','THY' // full names
+]);
+
+// Elements that can appear as HETATM ion records
+const ION_RESIDUES = new Set([
+  'CA','MG','ZN','FE','MN','CU','CO','NI','NA','K','LI',
+  'SR','BA','CS','RB','CD','HG','PB','PT','AU','AG',
+  'AL','CR','V','MO','W','SE','AS','BR','CL','IOD',
+  'FE2','FE3','FES','SF4','F3S'
+]);
+
+/**
+ * Resolve element symbol from a parsed PDB line.
+ * @param {string} elemCol  - raw content of columns 77-78 (may be blank)
+ * @param {string} atomName - columns 13-16, trimmed
+ * @param {boolean} isHetatm
+ * @param {string} resName  - columns 18-20, trimmed
+ * @returns {string} uppercase element symbol, e.g. "C", "CA", "ZN"
+ */
+function resolveElement(elemCol, atomName, isHetatm, resName) {
+  // ── 1. Trust the explicit element column when present ───────────
+  // mmCIF type_symbol and PDB columns 77-78 are always authoritative.
+  const fromCol = elemCol.trim().toUpperCase();
+  if (fromCol && /^[A-Z]{1,2}$/.test(fromCol) && fromCol !== '?') return fromCol;
+
+  const name = atomName.toUpperCase().trim();
+  const res  = resName.toUpperCase().trim();
+
+  // ── 2. Known single-atom HETATM residues (ion records) ─────────
+  if (isHetatm) {
+    // Multi-char residue names that ARE the element
+    const ionMap = {
+      'ZN':'ZN','ZN2':'ZN','MG':'MG','CA':'CA','FE':'FE','FE2':'FE','FE3':'FE',
+      'MN':'MN','CU':'CU','CU1':'CU','CU2':'CU','CO':'CO','NI':'NI','NA':'NA',
+      'K':'K','LI':'LI','RB':'RB','CS':'CS','SR':'SR','BA':'BA',
+      'IOD':'I','BR':'BR','CL':'CL','F':'F',
+      'ZR':'ZR','MO':'MO','AG':'AG','CD':'CD','IN':'IN','SN':'SN',
+      'SB':'SB','TE':'TE','LA':'LA','CE':'CE','GD':'GD','YB':'YB',
+      'W':'W','OS':'OS','IR':'IR','PT':'PT','AU':'AU','HG':'HG',
+      'TL':'TL','PB':'PB','BI':'BI','U':'U',
+      'FES':'FE','SF4':'FE','F3S':'FE','FEO':'FE',
+    };
+    if (ionMap[res]) return ionMap[res];
+    // HOH / water always oxygen
+    if (res === 'HOH' || res === 'WAT' || res === 'H2O' || res === 'DOD') return 'O';
+  }
+
+  // ── 3. Standard amino acid backbone: C-alpha/C-beta are always C ─
+  if (!isHetatm && AMINO_ACIDS.has(res)) {
+    const backbone = { N:'N', C:'C', O:'O', S:'S', SE:'SE',
+      CA:'C', CB:'C', CG:'C', CG1:'C', CG2:'C', CD:'C', CD1:'C', CD2:'C',
+      CE:'C', CE1:'C', CE2:'C', CE3:'C', CZ:'C', CZ2:'C', CZ3:'C', CH2:'C',
+      OG:'O', OG1:'O', OD1:'O', OD2:'O', OE1:'O', OE2:'O', OH:'O',
+      NZ:'N', NH1:'N', NH2:'N', ND1:'N', ND2:'N', NE:'N', NE1:'N', NE2:'N',
+      SD:'S', SG:'S',
+    };
+    if (backbone[name]) return backbone[name];
+    if (name === 'OXT' || name.startsWith('OT')) return 'O';
+  }
+
+  // ── 4. Nucleic acid backbone ────────────────────────────────────
+  if (!isHetatm && NUCLEIC_RESIDUES.has(res)) {
+    if (/^C/.test(name)) return 'C';
+    if (/^O/.test(name)) return 'O';
+    if (/^N/.test(name)) return 'N';
+    if (/^P/.test(name)) return 'P';
+  }
+
+  // ── 5. General heuristic: PDB atom naming conventions ───────────
+  // PDB format: cols 13-16, right-justified for 2-char elements (e.g. "FE" in 13-14),
+  // left-justified for 1-char (e.g. " CA" for alpha-carbon).
+  // Strip trailing digits/primes and try 2-char match first.
+  const stripped = name.replace(/[0-9'"*+\-]+$/, '').replace(/^[0-9]/, '');
+
+  // Try 2-char element first (needed for FE, ZN, MG, etc. in HETATM)
+  if (stripped.length >= 2) {
+    const two = stripped.substring(0, 2);
+    if (PENG[two] || CPK[two] !== undefined) return two;
+  }
+  // 1-char fallback
+  const one = stripped[0];
+  if (one && /^[A-Z]$/.test(one)) return one;
+  return 'C';
+}
+function loadFile(file) {
+  const name = file.name.toLowerCase();
+  const isCif = name.endsWith('.cif') || name.endsWith('.mmcif');
+  const isPdb = name.endsWith('.pdb');
+  if (!isCif && !isPdb) {
+    setStatus('⚠ Please upload a .pdb or .cif file'); return;
+  }
+  setStatus(`Loading ${file.name}…`);
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      rawPdbText = e.target.result;
+      if (isCif) {
+        const parsed = parseCIF(rawPdbText);
+        ssData   = parsed.ss;
+        allAtoms = parsed.atoms;
+      } else {
+        ssData   = parseSS(rawPdbText);
+        allAtoms = parsePDB(rawPdbText);
+      }
+      if (allAtoms.length === 0) { setStatus('⚠ No atoms found'); return; }
+      centerAtoms(allAtoms);
+      buildSSMap(allAtoms, ssData);   // geometry-based SS + record override
+      centerAtoms(allAtoms);
+      fullProjBox = computeProjBoxFrom(allAtoms); // lock box to full structure
+      activeProjBox = null;                        // clear any user override
+      buildChainPanel();              // populate chain visibility input
+      buildScene(true);   // reset orientation on fresh load
+      updateStats();
+      computeProjection();
+      document.getElementById('drop-zone').classList.add('hidden');
+      document.getElementById('status-dot').classList.add('active');
+      setStatus(`✓ Loaded ${file.name} · ${allAtoms.length.toLocaleString()} atoms`);
+    } catch(err) {
+      setStatus('⚠ Parse error: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ════════════════════════════════════════════════════════════
+//  mmCIF PARSER
+//  Handles _atom_site, _struct_conf (helices), _struct_sheet_range (sheets)
+// ════════════════════════════════════════════════════════════
+function parseCIF(text) {
+  // Tokenise the CIF into a flat list, tracking loop_ blocks
+  // Strategy: find each loop_ block, read its column headers, then rows.
+
+  const atoms   = [];
+  const helices = [];
+  const sheets  = [];
+
+  // Strip CIF comment lines (lines starting with #) before tokenizing.
+  // This prevents # tokens from bleeding into data row parsing.
+  function tokenize(src) {
+    const toks = [];
+    // Remove comment lines (# at start of line, possibly with leading whitespace)
+    const stripped = src.replace(/^[ \t]*#[^\n]*/mg, '');
+    const re = /;[\s\S]*?;|'[^']*'|"[^"]*"|\S+/g;
+    let m;
+    while ((m = re.exec(stripped)) !== null) {
+      let t = m[0];
+      if (t.startsWith(';')) t = t.slice(1, -1).trim();
+      else if ((t.startsWith("'") && t.endsWith("'")) ||
+               (t.startsWith('"') && t.endsWith('"'))) t = t.slice(1,-1);
+      toks.push(t);
+    }
+    return toks;
+  }
+
+  const toks = tokenize(text);
+  let i = 0;
+
+  while (i < toks.length) {
+    if (toks[i].toLowerCase() === 'loop_') {
+      i++;
+      // Collect column names
+      const cols = [];
+      while (i < toks.length && toks[i].startsWith('_')) {
+        cols.push(toks[i].toLowerCase());
+        i++;
+      }
+      // Determine which loop this is by its columns
+      const isAtom  = cols.some(c => c.startsWith('_atom_site.'));
+      const isConf  = cols.some(c => c.startsWith('_struct_conf.'));
+      const isSheet = cols.some(c => c.startsWith('_struct_sheet_range.'));
+
+      // Read rows until next keyword
+      while (i < toks.length && !toks[i].startsWith('_') &&
+             toks[i].toLowerCase() !== 'loop_' && !toks[i].startsWith('data_') &&
+             toks[i] !== '#') {
+        const row = {};
+        for (let ci = 0; ci < cols.length; ci++, i++) {
+          if (i >= toks.length) break;
+          row[cols[ci]] = toks[i];
+        }
+
+        if (isAtom) {
+          const grp   = row['_atom_site.group_pdb'] || 'ATOM';
+          const isHet = grp.trim().toUpperCase() === 'HETATM';
+          const x = parseFloat(row['_atom_site.cartn_x']);
+          const y = parseFloat(row['_atom_site.cartn_y']);
+          const z = parseFloat(row['_atom_site.cartn_z']);
+          if (isNaN(x)||isNaN(y)||isNaN(z)) continue;
+
+          // Use auth fields if present, fall back to label fields
+          const chain   = (row['_atom_site.auth_asym_id'] || row['_atom_site.label_asym_id'] || 'A').trim();
+          const resSeq  = parseInt(row['_atom_site.auth_seq_id'] || row['_atom_site.label_seq_id']) || 0;
+          const atomName= (row['_atom_site.label_atom_id'] || '').trim();
+          const resName = (row['_atom_site.label_comp_id'] || '').trim();
+          let   el      = (row['_atom_site.type_symbol'] || '').trim().toUpperCase();
+          if (!el) el = resolveElement('', atomName, isHet, resName);
+
+          // Skip alternate conformations (keep only first: '.' or 'A')
+          const altLoc = (row['_atom_site.label_alt_id'] || '.').trim();
+          if (altLoc !== '.' && altLoc !== 'A' && altLoc !== '') continue;
+
+          atoms.push({ x, y, z, el, isHetatm: isHet, atomName, resName,
+                       chain: chain || 'A', resSeq });
+        }
+
+        if (isConf) {
+          // HELX_P = alpha helix; other HELX_ = various helix types
+          const type = (row['_struct_conf.conf_type_id'] || '').toUpperCase();
+          if (type.startsWith('HELX')) {
+            helices.push({
+              chain: (row['_struct_conf.beg_label_asym_id'] || row['_struct_conf.end_label_asym_id'] || 'A').trim(),
+              start: parseInt(row['_struct_conf.beg_label_seq_id']),
+              end:   parseInt(row['_struct_conf.end_label_seq_id'])
+            });
+          }
+        }
+
+        if (isSheet) {
+          sheets.push({
+            chain: (row['_struct_sheet_range.beg_label_asym_id'] || 'A').trim(),
+            start: parseInt(row['_struct_sheet_range.beg_label_seq_id']),
+            end:   parseInt(row['_struct_sheet_range.end_label_seq_id'])
+          });
+        }
+      }
+    } else {
+      i++;
+    }
+  }
+
+  return { atoms, ss: { helices, sheets } };
+}
+
+// ════════════════════════════════════════════════════════════
+//  SECONDARY STRUCTURE — two-tier approach
+//
+//  Tier 1 (preferred): geometry-based DSSP-like assignment
+//    from Cα and backbone N/CA/C atoms — works on any file.
+//  Tier 2 (override): HELIX/SHEET records or mmCIF tables
+//    when present, merged on top of geometry assignment.
+// ════════════════════════════════════════════════════════════
+
+// ssMap: "chain:resSeq" → 'H' | 'E' | 'C'  (computed after atoms load)
+function buildSSMap(atoms, recordSS) {
+  ssMap = {};
+
+  // Collect backbone atoms per residue
+  const residues = {};
+  for (const a of atoms) {
+    if (a.isHetatm || !AMINO_ACIDS.has(a.resName.toUpperCase())) continue;
+    const key = `${a.chain}:${a.resSeq}`;
+    if (!residues[key]) residues[key] = { chain: a.chain, resSeq: a.resSeq };
+    const r = residues[key];
+    if      (a.atomName === 'CA') r.ca = a;
+    else if (a.atomName === 'N')  r.n  = a;
+    else if (a.atomName === 'C')  r.c  = a;
+    else if (a.atomName === 'O')  r.o  = a;
+  }
+
+  const byChain = {};
+  for (const res of Object.values(residues)) {
+    if (!res.ca) continue;
+    (byChain[res.chain] = byChain[res.chain] || []).push(res);
+  }
+  for (const ch of Object.keys(byChain))
+    byChain[ch].sort((a, b) => a.resSeq - b.resSeq);
+
+  const dist = (a, b) => Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2+(a.z-b.z)**2);
+
+  // ── Proper ksdssp H-position (matches ChimeraX/ksdssp exactly) ────
+  // H placed 1.01 A from N along bisector of:
+  //   v1 = -(bisector of C_prev-N-CA angle)
+  //   v2 = -(C_prev->O_prev direction)  = normalize(O_prev - C_prev) negated
+  function vnorm(v) {
+    const l = Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z) || 1;
+    return { x:v.x/l, y:v.y/l, z:v.z/l };
+  }
+  function vadd(a,b) { return {x:a.x+b.x, y:a.y+b.y, z:a.z+b.z}; }
+  function vsub(a,b) { return {x:a.x-b.x, y:a.y-b.y, z:a.z-b.z}; }
+
+  for (const chain of Object.values(byChain)) {
+    for (let i = 1; i < chain.length; i++) {
+      const r = chain[i], rp = chain[i-1];
+      if (r.resSeq - rp.resSeq > 2) continue;
+      if (!r.n || !r.ca || !rp.c) continue;
+      const v_cn  = vnorm(vsub(rp.c, r.n));
+      const v_can = vnorm(vsub(r.ca, r.n));
+      const v1 = vnorm({x:-(v_cn.x+v_can.x), y:-(v_cn.y+v_can.y), z:-(v_cn.z+v_can.z)});
+      const v2 = rp.o ? vnorm(vsub(rp.c, rp.o)) : v1;
+      const hd = vnorm(vadd(v1, v2));
+      r.h = { x: r.n.x+hd.x*1.01, y: r.n.y+hd.y*1.01, z: r.n.z+hd.z*1.01 };
+    }
+  }
+
+  // ── H-bond energy (Kabsch & Sander 1983, threshold -0.5 kcal/mol) ─
+  function hbE(oi, ci, nj, hj) {
+    if (!oi||!ci||!nj||!hj) return 0;
+    const rON=dist(oi,nj), rCH=dist(ci,hj), rOH=dist(oi,hj), rCN=dist(ci,nj);
+    if (rON<0.5||rCH<0.5||rOH<0.5||rCN<0.5) return 0;
+    return 27.888*(1/rON+1/rCH-1/rOH-1/rCN);
+  }
+
+  // Flat residue list + compact H-bond bitfield hb[i*M+j]
+  const allRes = [];
+  for (const chain of Object.values(byChain)) for (const r of chain) allRes.push(r);
+  const M = allRes.length;
+  const hb = new Uint8Array(M * M);
+  for (let i = 0; i < M; i++) {
+    const ri = allRes[i];
+    if (!ri.o || !ri.c) continue;
+    for (let j = 0; j < M; j++) {
+      if (Math.abs(i-j) < 2) continue;
+      const rj = allRes[j];
+      if (!rj.n || !rj.h) continue;
+      if (dist(ri.o, rj.n) > 10) continue;
+      if (hbE(ri.o, ri.c, rj.n, rj.h) < -0.5) hb[i*M+j] = 1;
+    }
+  }
+  const bon = (i,j) => i>=0&&j>=0&&i<M&&j<M && hb[i*M+j]===1;
+
+  // ── Beta bridges: Kabsch & Sander Table 2 ─────────────────────────
+  // Antiparallel: [bon(i,j)&bon(j,i)] OR [bon(i-1,j+1)&bon(j-1,i+1)]
+  // Parallel:     [bon(i-1,j)&bon(j,i+1)] OR [bon(j-1,i)&bon(i,j+1)]
+  const strandIdx = new Set();
+  for (let i = 1; i < M-1; i++) {
+    for (let j = i+3; j < M-1; j++) {
+      if (allRes[i].chain !== allRes[j].chain) continue;
+      const anti = (bon(i,j)&&bon(j,i)) || (bon(i-1,j+1)&&bon(j-1,i+1));
+      const para = (bon(i-1,j)&&bon(j,i+1)) || (bon(j-1,i)&&bon(i,j+1));
+      if (anti||para) { strandIdx.add(i); strandIdx.add(j); }
+    }
+  }
+
+  // ── Helices: consecutive i->i+4 (alpha) or i->i+3 (3-10) turns ───
+  const turn4 = new Uint8Array(M), turn3 = new Uint8Array(M);
+  for (let i = 0; i < M-4; i++) if (bon(i,i+4)) turn4[i]=1;
+  for (let i = 0; i < M-3; i++) if (bon(i,i+3)) turn3[i]=1;
+  const helixIdx = new Set();
+  for (let i = 0; i < M-5; i++)
+    if (turn4[i]&&turn4[i+1]) for (let k=i+1;k<=i+4;k++) helixIdx.add(k);
+  for (let i = 0; i < M-4; i++)
+    if (turn3[i]&&turn3[i+1]) for (let k=i+1;k<=i+3;k++) helixIdx.add(k);
+
+  // Strand beats helix
+  for (const k of strandIdx) helixIdx.delete(k);
+
+  // ── Assign ssMap (min run 3 residues, matching ChimeraX default) ──
+  for (const chain of Object.values(byChain)) {
+    const N = chain.length;
+    // find base offset of this chain in allRes
+    let base = 0;
+    while (base < M && allRes[base] !== chain[0]) base++;
+
+    const hFlag = chain.map((_,ci) => helixIdx.has(base+ci) ? 1 : 0);
+    for (let i=0;i<N;) {
+      if (hFlag[i]) {
+        let j=i; while(j<N&&hFlag[j]) j++;
+        if (j-i>=3) for(let k=i;k<j;k++) ssMap[`${chain[k].chain}:${chain[k].resSeq}`]='H';
+        i=j;
+      } else i++;
+    }
+    const eFlag = chain.map((_,ci)=>{
+      const key=`${chain[ci].chain}:${chain[ci].resSeq}`;
+      return (strandIdx.has(base+ci)&&ssMap[key]!=='H')?1:0;
+    });
+    for (let i=0;i<N;) {
+      if (eFlag[i]) {
+        let j=i; while(j<N&&eFlag[j]) j++;
+        if (j-i>=3) for(let k=i;k<j;k++) ssMap[`${chain[k].chain}:${chain[k].resSeq}`]='E';
+        i=j;
+      } else i++;
+    }
+  }
+
+  // ── Explicit record override ───────────────────────────────────────
+  const normC = c => (c&&c!=='.')?c:'A';
+  for (const h of recordSS.helices) {
+    if (isNaN(h.start)||isNaN(h.end)) continue;
+    for (const res of Object.values(residues))
+      if (normC(res.chain)===normC(h.chain)&&res.resSeq>=h.start&&res.resSeq<=h.end)
+        ssMap[`${res.chain}:${res.resSeq}`]='H';
+  }
+  for (const s of recordSS.sheets) {
+    if (isNaN(s.start)||isNaN(s.end)) continue;
+    for (const res of Object.values(residues))
+      if (normC(res.chain)===normC(s.chain)&&res.resSeq>=s.start&&res.resSeq<=s.end)
+        ssMap[`${res.chain}:${res.resSeq}`]='E';
+  }
+}
+function getSSType(chain, resSeq) {
+  return ssMap[`${chain}:${resSeq}`] || 'C';
+}
+
+function parseSS(text) {
+  // Parse PDB HELIX/SHEET records — offsets verified against real 1CRN PDB.
+  const helices = [], sheets = [];
+  for (const line of text.split('\n')) {
+    const rec = line.substring(0, 6).trimEnd();
+    if (rec === 'HELIX') {
+      const chain = line.substring(19, 20).trim();
+      const start = parseInt(line.substring(21, 25));
+      const end   = parseInt(line.substring(33, 37));
+      if (!isNaN(start) && !isNaN(end)) helices.push({ chain, start, end });
+    } else if (rec === 'SHEET') {
+      const chain = line.substring(22, 23).trim();
+      const start = parseInt(line.substring(23, 27));
+      const end   = parseInt(line.substring(34, 38));
+      if (!isNaN(start) && !isNaN(end)) sheets.push({ chain, start, end });
+    }
+  }
+  return { helices, sheets };
+}
+
+// ════════════════════════════════════════════════════════════
+//  PDB LOADING & PARSING
+// ════════════════════════════════════════════════════════════
+function parsePDB(text) {
+  const atoms = [];
+  for (const line of text.split('\n')) {
+    const rec = line.substring(0, 6).trimEnd();
+    const isAtom   = rec === 'ATOM';
+    const isHetatm = rec === 'HETATM';
+    if (!isAtom && !isHetatm) continue;
+    const x = parseFloat(line.substring(30,38));
+    const y = parseFloat(line.substring(38,46));
+    const z = parseFloat(line.substring(46,54));
+    if (isNaN(x)||isNaN(y)||isNaN(z)) continue;
+    const elemCol  = line.length > 76 ? line.substring(76,78) : '';
+    const atomName = line.substring(12,16).trim();
+    const resName  = line.substring(17,20).trim();
+    const resSeq   = parseInt(line.substring(22,26)) || 0;
+    const chain    = line.substring(21,22).trim() || 'A';
+    const el = resolveElement(elemCol, atomName, isHetatm, resName);
+    atoms.push({ x, y, z, el, isHetatm, atomName, resName, chain, resSeq });
+  }
+  return atoms;
+}
+
+function centerAtoms(atoms) {
+  let cx=0,cy=0,cz=0;
+  for (const a of atoms) { cx+=a.x; cy+=a.y; cz+=a.z; }
+  cx/=atoms.length; cy/=atoms.length; cz/=atoms.length;
+  for (const a of atoms) { a.x-=cx; a.y-=cy; a.z-=cz; }
+}
+
+// ════════════════════════════════════════════════════════════
+//  BUILD 3-D SCENE
+// ════════════════════════════════════════════════════════════
+function buildScene(resetOrientation = false) {
+  while (molecule.children.length) molecule.remove(molecule.children[0]);
+  if (resetOrientation) molecule.quaternion.identity();
+
+  // Hide water for large structures (>20 000 atoms) to keep the scene light.
+  const isLarge = allAtoms.length > 20000;
+  visAtoms = allAtoms.filter(a => {
+    if (!showHetatm && a.isHetatm) return false;
+    if (hiddenChains.has(a.chain)) return false;
+    if (isLarge && a.isHetatm && (a.resName === 'HOH' || a.resName === 'WAT' || a.resName === 'H2O')) return false;
+    return true;
+  });
+
+  let xmx=-Infinity,xmn=Infinity,ymx=-Infinity,ymn=Infinity,zmx=-Infinity,zmn=Infinity;
+  for (const a of visAtoms) {
+    xmx=Math.max(xmx,a.x); xmn=Math.min(xmn,a.x);
+    ymx=Math.max(ymx,a.y); ymn=Math.min(ymn,a.y);
+    zmx=Math.max(zmx,a.z); zmn=Math.min(zmn,a.z);
+  }
+  const maxDim = Math.max(xmx-xmn, ymx-ymn, zmx-zmn);
+  camera.position.z = maxDim * 0.9 + 30;
+  camera.far = camera.position.z * 5;
+  camera.updateProjectionMatrix();
+
+  // Compute sceneOffset = centroid of visAtoms in atom-space coordinates.
+  // All mesh positions inside the molecule group are offset by -sceneOffset so
+  // the visible centroid lands at the group's local origin (0,0,0), which is
+  // exactly where Three.js pivots rotation. molecule.position stays (0,0,0).
+  molecule.position.set(0, 0, 0);
+  if (visAtoms.length > 0) {
+    let cx=0, cy=0, cz=0;
+    for (const a of visAtoms) { cx+=a.x; cy+=a.y; cz+=a.z; }
+    sceneOffset.set(cx/visAtoms.length, cy/visAtoms.length, cz/visAtoms.length);
+  } else {
+    sceneOffset.set(0, 0, 0);
+  }
+  if (cartoonMode) buildCartoon();
+  else             buildBalls(visAtoms);
+
+  volumeDirty = true;   // structure changed — rebuild 3D volume before next projection
+  projNeedsUpdate = true;
+}
+
+function buildBalls(atoms) {
+  const geo = new THREE.SphereGeometry(1, 12, 8);
+  const byEl = {};
+  for (const a of atoms) { if (!byEl[a.el]) byEl[a.el]=[]; byEl[a.el].push(a); }
+  const dummy = new THREE.Object3D();
+  for (const [el, list] of Object.entries(byEl)) {
+    const color  = CPK[el] !== undefined ? CPK[el] : CPK.DEFAULT;
+    const radius = (VDW[el] !== undefined ? VDW[el] : VDW.DEFAULT) * atomSizeMult;
+    const mat = new THREE.MeshPhongMaterial({ color, shininess:100, specular:new THREE.Color(0.35,0.35,0.35) });
+    if (list.length === 1) {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(list[0].x - sceneOffset.x, list[0].y - sceneOffset.y, list[0].z - sceneOffset.z);
+      m.scale.setScalar(radius); molecule.add(m);
+    } else {
+      const im = new THREE.InstancedMesh(geo, mat, list.length);
+      im.frustumCulled = false;
+      for (let i=0; i<list.length; i++) {
+        dummy.position.set(list[i].x - sceneOffset.x, list[i].y - sceneOffset.y, list[i].z - sceneOffset.z);
+        dummy.scale.setScalar(radius); dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+      }
+      im.instanceMatrix.needsUpdate = true; molecule.add(im);
+    }
+  }
+}
+
+const COVALENT_R = {
+  H:0.31,C:0.76,N:0.71,O:0.66,S:1.05,P:1.07,F:0.57,CL:0.99,BR:1.14,I:1.33,
+  FE:1.32,CA:1.76,MG:1.41,ZN:1.22,CU:1.32,MN:1.39,CO:1.26,NI:1.24,
+  NA:1.66,K:2.03,AL:1.21,SI:1.11,SE:1.20,AS:1.21,DEFAULT:0.77
+};
+function covR(el) { return COVALENT_R[el] ?? COVALENT_R.DEFAULT; }
+
+function buildSticks(atoms) {
+  if (!atoms.length) return;
+  const STICK_R=0.18, BALL_R=0.28, BOND_TOL=1.25;
+  const sphGeo=new THREE.SphereGeometry(1,8,6);
+  const cylGeo=new THREE.CylinderGeometry(1,1,1,8,1);
+  const matCache={};
+  const getMat=el=>{ if(!matCache[el]) matCache[el]=new THREE.MeshPhongMaterial({color:CPK[el]??CPK.DEFAULT,shininess:80}); return matCache[el]; };
+  for (const a of atoms) {
+    const m=new THREE.Mesh(sphGeo,getMat(a.el));
+    m.position.set(a.x-sceneOffset.x, a.y-sceneOffset.y, a.z-sceneOffset.z); m.scale.setScalar(BALL_R); molecule.add(m);
+  }
+  for (let i=0; i<atoms.length; i++) {
+    const a=atoms[i];
+    for (let j=i+1; j<atoms.length; j++) {
+      const b=atoms[j];
+      const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z;
+      const dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
+      if (dist<0.4||dist>(covR(a.el)+covR(b.el))*BOND_TOL) continue;
+      const ax=a.x-sceneOffset.x, ay=a.y-sceneOffset.y, az=a.z-sceneOffset.z;
+      const bx=b.x-sceneOffset.x, by=b.y-sceneOffset.y, bz=b.z-sceneOffset.z;
+      const mid=new THREE.Vector3((ax+bx)/2,(ay+by)/2,(az+bz)/2);
+      const dir=new THREE.Vector3(dx,dy,dz).normalize();
+      const quat=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+      for (const [from,to,mat] of [
+        [new THREE.Vector3(ax,ay,az),mid,getMat(a.el)],
+        [mid,new THREE.Vector3(bx,by,bz),getMat(b.el)]
+      ]) {
+        const halfLen=from.distanceTo(to);
+        const center=from.clone().add(to).multiplyScalar(0.5);
+        const m2=new THREE.Mesh(cylGeo,mat);
+        m2.position.copy(center); m2.quaternion.copy(quat);
+        m2.scale.set(STICK_R,halfLen,STICK_R); molecule.add(m2);
+      }
+    }
+  }
+}
+
+// Unified per-chain ribbon: one CatmullRom spline per chain.
+const RIBBON_THICKNESS = 0.30;
+const HELIX_WIDTH      = 2.00;
+const SHEET_WIDTH      = 1.80;
+const SHEET_ARROW_W    = 3.20;
+const COIL_RADIUS      = 0.25;
+const SPLINE_DIV       = 8;
+const N_PROF           = 8;
+
+const CARTOON_COLORS = {
+  H: 0x7ec8be,   // uniform protein color (soft teal-sage) — same for all SS types
+  E: 0x7ec8be,
+  C: 0x7ec8be,
+};
+
+function buildCartoon() {
+  const oMap = {};
+  for (const a of allAtoms)
+    if (!a.isHetatm && a.atomName === 'O')
+      oMap[`${a.chain}:${a.resSeq}`] = a;
+
+  const byChain = {};
+  for (const a of allAtoms) {
+    if (a.isHetatm || a.atomName !== 'CA') continue;
+    if (!AMINO_ACIDS.has(a.resName.toUpperCase())) continue;
+    if (hiddenChains.has(a.chain)) continue;
+    (byChain[a.chain] = byChain[a.chain] || []).push(a);
+  }
+
+  for (const chainAtoms of Object.values(byChain)) {
+    chainAtoms.sort((a, b) => a.resSeq - b.resSeq);
+    const NR = chainAtoms.length;
+    if (NR < 2) continue;
+
+    const ssTypes = chainAtoms.map(r => getSSType(r.chain, r.resSeq));
+
+    let guides = chainAtoms.map(r => {
+      const o = oMap[`${r.chain}:${r.resSeq}`];
+      if (o) return new THREE.Vector3(o.x-r.x, o.y-r.y, o.z-r.z).normalize();
+      return new THREE.Vector3(0, 1, 0);
+    });
+    // Sign-correct so no guide flips direction vs its neighbour
+    for (let i = 1; i < NR; i++)
+      if (guides[i].dot(guides[i-1]) < 0) guides[i].negate();
+    // Heavy 7-point box smoothing (15 passes) — essential for flat sheet ribbons.
+    // Beta strands have alternating C=O directions that cause visible waviness
+    // without aggressive smoothing.
+    for (let pass = 0; pass < 15; pass++) {
+      const smoothed = guides.map((g, i) => {
+        const lo = Math.max(0, i-3), hi = Math.min(NR-1, i+3);
+        const sum = new THREE.Vector3();
+        for (let k = lo; k <= hi; k++) sum.add(guides[k]);
+        return sum.normalize();
+      });
+      guides = smoothed;
+    }
+
+    const caVecs = chainAtoms.map(r => new THREE.Vector3(r.x - sceneOffset.x, r.y - sceneOffset.y, r.z - sceneOffset.z));
+    const curve  = new THREE.CatmullRomCurve3(caVecs, false, 'catmullrom', 0.5);
+    const NS     = NR * SPLINE_DIV;
+    const splinePts   = curve.getPoints(NS);
+    // Compute tangents via finite differences (getTangents not in r128)
+    const splineTangs = splinePts.map((p, i) => {
+      const prev = splinePts[Math.max(0, i-1)];
+      const next = splinePts[Math.min(NS, i+1)];
+      return next.clone().sub(prev).normalize();
+    });
+
+    const splineGuides = splinePts.map((_, si) => {
+      const t  = (si / NS) * (NR - 1);
+      const lo = Math.floor(t), hi = Math.min(lo + 1, NR - 1);
+      return guides[lo].clone().lerp(guides[hi], t - lo).normalize();
+    });
+
+    // Per-sample cross-section (halfW, halfH)
+    const hW = new Float32Array(NS + 1);
+    const hH = new Float32Array(NS + 1);
+    for (let si = 0; si <= NS; si++) {
+      const ri = Math.min(Math.floor((si / NS) * NR), NR - 1);
+      const ss = ssTypes[ri];
+      if      (ss === 'H') { hW[si] = HELIX_WIDTH/2; hH[si] = RIBBON_THICKNESS/2; }
+      else if (ss === 'E') { hW[si] = SHEET_WIDTH/2; hH[si] = RIBBON_THICKNESS/2; }
+      else                  { hW[si] = COIL_RADIUS;   hH[si] = COIL_RADIUS; }
+    }
+
+    // Smooth transitions at SS boundaries over SPLINE_DIV samples
+    const TL = SPLINE_DIV;
+    for (let si = 1; si <= NS; si++) {
+      if (Math.abs(hW[si]-hW[si-1]) > 0.01 || Math.abs(hH[si]-hH[si-1]) > 0.01) {
+        const w1=hW[si], h1=hH[si];
+        const st = Math.max(0, si-TL);
+        const w0=hW[st], h0=hH[st];
+        for (let k = st; k < si; k++) {
+          const f = (k-st)/(si-st);
+          hW[k] = w0*(1-f)+w1*f;
+          hH[k] = h0*(1-f)+h1*f;
+        }
+      }
+    }
+
+    // Sheet arrow at C-terminal end of each E segment
+    { let inE=false, eS=0;
+      for (let si = 0; si <= NS; si++) {
+        const ri  = Math.min(Math.floor((si/NS)*NR), NR-1);
+        const ss  = ssTypes[ri];
+        if (ss==='E' && !inE) { inE=true; eS=si; }
+        if (ss!=='E' && inE) {
+          const eE=si-1, aS=Math.floor(eS+(eE-eS)*0.68);
+          for (let k=aS; k<=eE; k++) {
+            const t=(k-aS)/Math.max(1,eE-aS);
+            const flare=SHEET_ARROW_W/2, base=SHEET_WIDTH/2;
+            hW[k] = t<0.3 ? base+(flare-base)*(t/0.3) : flare*Math.max(0,1-(t-0.3)/0.7);
+          }
+          inE=false;
+        }
+      }
+    }
+
+    // Color runs — each run shares its boundary sample with the adjacent run
+    const rawSS = Array.from({length: NS}, (_, si) =>
+      ssTypes[Math.min(Math.floor((si/NS)*NR), NR-1)]);
+
+    const runs = [];
+    let rS = 0;
+    for (let si = 1; si <= NS; si++) {
+      const cur = si < NS ? rawSS[si] : null, prev = rawSS[si-1];
+      if (cur !== prev || si === NS) {
+        runs.push({ ss: prev, from: rS, to: si });
+        rS = si;
+      }
+    }
+
+    for (const run of runs) {
+      const { from, to } = run;
+      if (to - from < 1) continue;
+      const pos=[], nrm=[], triIdx=[];
+
+      for (let si = from; si <= to; si++) {
+        const P  = splinePts[Math.min(si, NS)];
+        const T  = splineTangs[Math.min(si, NS)].clone().normalize();
+        const G  = splineGuides[Math.min(si, NS)].clone();
+        G.addScaledVector(T, -G.dot(T)).normalize();
+        if (G.lengthSq() < 0.0001) G.set(0, 1, 0);
+        const B  = T.clone().cross(G).normalize();
+        const hw = hW[Math.min(si, NS)], hh = hH[Math.min(si, NS)];
+
+        for (let k = 0; k < N_PROF; k++) {
+          const theta = (k/N_PROF)*Math.PI*2;
+          const wx=hw*Math.cos(theta), hy=hh*Math.sin(theta);
+          pos.push(P.x+wx*G.x+hy*B.x, P.y+wx*G.y+hy*B.y, P.z+wx*G.z+hy*B.z);
+          const nx=hh*Math.cos(theta), ny=hw*Math.sin(theta);
+          const nl=Math.sqrt(nx*nx+ny*ny)||1;
+          nrm.push((nx/nl)*G.x+(ny/nl)*B.x, (nx/nl)*G.y+(ny/nl)*B.y, (nx/nl)*G.z+(ny/nl)*B.z);
+        }
+
+        if (si < to) {
+          const base=(si-from)*N_PROF;
+          for (let k=0; k<N_PROF; k++) {
+            const a=base+k, b=base+(k+1)%N_PROF, c=base+N_PROF+k, d=base+N_PROF+(k+1)%N_PROF;
+            triIdx.push(a,b,c, b,d,c);
+          }
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal',   new THREE.Float32BufferAttribute(nrm, 3));
+      geo.setIndex(triIdx);
+      geo.computeVertexNormals();
+      const color = CARTOON_COLORS[run.ss] || CARTOON_COLORS.C;
+      molecule.add(new THREE.Mesh(geo,
+        new THREE.MeshPhongMaterial({ color, shininess: 80, specular: new THREE.Color(0.2,0.2,0.2) })));
+    }
+  }
+
+  buildSticks(allAtoms.filter(a => a.isHetatm && showHetatm && !hiddenChains.has(a.chain)));
+  buildNABackbone();
+}
+
+function buildNABackbone() {
+  const naByChain = {};
+  for (const a of allAtoms) {
+    if (a.isHetatm || a.atomName !== 'P') continue;
+    const res = a.resName.toUpperCase();
+    if (!NUCLEIC_RESIDUES.has(res)) continue;
+    if (hiddenChains.has(a.chain)) continue;
+    if (!naByChain[a.chain]) naByChain[a.chain] = [];
+    naByChain[a.chain].push(a);
+  }
+  for (const atoms of Object.values(naByChain)) {
+    atoms.sort((a, b) => a.resSeq - b.resSeq);
+    if (atoms.length < 2) continue;
+    const pts   = atoms.map(a => new THREE.Vector3(a.x - sceneOffset.x, a.y - sceneOffset.y, a.z - sceneOffset.z));
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
+    const tube  = new THREE.TubeGeometry(curve, pts.length * 4, 0.7, 8, false);
+    const mat   = new THREE.MeshPhongMaterial({ color: 0x4caf50, shininess: 60 });
+    const mesh  = new THREE.Mesh(tube, mat);
+    molecule.add(mesh);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  PROJECTION — True hybrid method
+//
+//  computeProjectionFast  (called every 2nd frame while dragging):
+//    Ray-cast through the cached 3D volume using R^T to sample
+//    voxels along the current world-Z direction.  O(PGRID² × NV).
+//    Volume is rebuilt only when structure or B-factor changes.
+//
+//  computeProjection  (called once on mouseup / after load):
+//    Accurate per-atom 2D Gaussian sum — analytically integrates
+//    Peng scattering factors along Z after applying the current
+//    rotation.  Visibly sharper than the volume version.
+//
+//  Grid constraints (both paths share the same box):
+//    • Box = 1.5 × longest ATOM/non-HOH/non-ion dimension
+//    • Pixel size ≥ 1 Å enforced
+// ════════════════════════════════════════════════════════════
+
+// ── Shared: compute grid bounds (1.5× longest dim, min 1Å) ──────
+// Always uses the full-structure box (locked on load) so that hiding chains
+// never shrinks or recenters the projection canvas.
+function getProjectionBox() {
+  if (activeProjBox) return activeProjBox;
+  if (fullProjBox)   return fullProjBox;
+  return computeProjBoxFrom(visAtoms);
+}
+
+function computeProjBoxFrom(atoms) {
+  const macroAtoms = atoms.filter(a => {
+    if (!a.isHetatm) return true;
+    if (a.resName === 'HOH' || a.resName === 'WAT' || a.resName === 'H2O' || a.resName === 'DOD') return false;
+    if (a.resName.trim().toUpperCase() === a.el) return false;
+    return true;
+  });
+  const src = macroAtoms.length > 0 ? macroAtoms : atoms;
+  let xmn=Infinity,xmx=-Infinity,ymn=Infinity,ymx=-Infinity,zmn=Infinity,zmx=-Infinity;
+  for (const a of src) {
+    xmn=Math.min(xmn,a.x); xmx=Math.max(xmx,a.x);
+    ymn=Math.min(ymn,a.y); ymx=Math.max(ymx,a.y);
+    zmn=Math.min(zmn,a.z); zmx=Math.max(zmx,a.z);
+  }
+  const longestDim = Math.max(xmx-xmn, ymx-ymn, zmx-zmn);
+  const boxSize    = longestDim * boxMultiplier;
+  const delta      = Math.max(1.0, boxSize / PROJ_GRID);
+  const nVox       = Math.ceil(boxSize / delta) + 2;
+  const cx=(xmn+xmx)/2, cy=(ymn+ymx)/2, cz=(zmn+zmx)/2;
+  return { delta, nVox, cx, cy, cz, boxSize };
+}
+
+// ── Shared: render a flat grid to the projection canvas ─────────
+function renderGrid(grid, PGRID, delta, nVox) {
+  const nonZero = [];
+  for (let i = 0; i < grid.length; i++) if (grid[i] > 0) nonZero.push(grid[i]);
+  nonZero.sort((a,b) => a-b);
+  const p99 = nonZero.length > 0 ? nonZero[Math.floor(nonZero.length * 0.99)] : 1;
+  const scale = brightness / (p99 > 0 ? p99 : 1);
+
+  projCanvas.width  = PGRID;
+  projCanvas.height = PGRID;
+  const imgData = projCtx.createImageData(PGRID, PGRID);
+  const d = imgData.data;
+  for (let i = 0; i < PGRID * PGRID; i++) {
+    const v = hotColormap(Math.min(1, grid[i] * scale));
+    const idx = i * 4;
+    d[idx]=v; d[idx+1]=v; d[idx+2]=v; d[idx+3]=255;
+  }
+  projCtx.putImageData(imgData, 0, 0);
+
+  // ── Scale bar: integer multiple of 10 Å, ~30% of box width ──────
+  const boxAng    = nVox * delta;
+  const rawTarget = boxAng * 0.30;
+  const step = rawTarget >= 500 ? 100 :
+               rawTarget >= 100 ? 50  :
+               rawTarget >= 50  ? 20  : 10;
+  const targetAng = Math.max(step, Math.floor(rawTarget / step) * step);
+  const cssWidth  = projCanvas.clientWidth || projCanvas.offsetWidth || PGRID;
+  const barPx     = Math.round(targetAng * cssWidth / boxAng);
+  const barEl  = document.getElementById('scalebar-line');
+  const barLbl = document.getElementById('scalebar-label');
+  if (barEl)  barEl.style.width  = barPx + 'px';
+  if (barLbl) barLbl.textContent = targetAng + ' Å';
+
+  // ── Update particle box and pixel size stats ─────────────────────
+  const boxEl = document.getElementById('s-box');
+  const pixEl = document.getElementById('s-pixel');
+  if (boxEl)  boxEl.textContent = boxAng.toFixed(0) + ' Å';
+  if (pixEl)  pixEl.textContent = delta.toFixed(2) + ' Å/px';
+}
+
+// ── BUILD 3D VOLUME (once per structure/blur change) ────────────
+function buildCachedVolume() {
+  const { delta, nVox, cx, cy, cz } = getProjectionBox();
+  const xmin3 = cx - nVox/2*delta;
+  const ymin3 = cy - nVox/2*delta;
+  const zmin3 = cz - nVox/2*delta;
+
+  const vol = new Float32Array(nVox * nVox * nVox);
+
+  const elKernelMap = new Map();
+  for (const a of visAtoms)
+    if (!elKernelMap.has(a.el)) elKernelMap.set(a.el, getBFactorKernel(a.el, bFactor));
+
+  let globalCutoff2 = 0;
+  for (const { cutoff2 } of elKernelMap.values()) if (cutoff2 > globalCutoff2) globalCutoff2 = cutoff2;
+  const cellCut = Math.ceil(Math.sqrt(globalCutoff2) / delta);
+
+  for (const a of visAtoms) {
+    const { terms, cutoff2 } = elKernelMap.get(a.el);
+    const gxi = Math.round((a.x - xmin3) / delta);
+    const gyi = Math.round((a.y - ymin3) / delta);
+    const gzi = Math.round((a.z - zmin3) / delta);
+    const x0=Math.max(0,gxi-cellCut), x1=Math.min(nVox-1,gxi+cellCut);
+    const y0=Math.max(0,gyi-cellCut), y1=Math.min(nVox-1,gyi+cellCut);
+    const z0=Math.max(0,gzi-cellCut), z1=Math.min(nVox-1,gzi+cellCut);
+    for (let gz=z0; gz<=z1; gz++) {
+      const dz2 = ((gz*delta+zmin3)-a.z)**2;
+      if (dz2 > cutoff2) continue;
+      for (let gy=y0; gy<=y1; gy++) {
+        const dy2 = ((gy*delta+ymin3)-a.y)**2 + dz2;
+        if (dy2 > cutoff2) continue;
+        for (let gx=x0; gx<=x1; gx++) {
+          const r2 = ((gx*delta+xmin3)-a.x)**2 + dy2;
+          if (r2 > cutoff2) continue;
+          let phi = 0;
+          for (const { A, inv2sig2 } of terms) phi += A * Math.exp(-inv2sig2 * r2);
+          vol[gz*nVox*nVox + gy*nVox + gx] += phi;
+        }
+      }
+    }
+  }
+
+  cachedVolume   = vol;
+  cachedVolGridW = nVox;
+  cachedVolGridD = nVox;
+  cachedVolDelta = delta;
+  cachedVolXmin  = xmin3;
+  cachedVolYmin  = ymin3;
+  cachedVolZmin  = zmin3;
+  volumeDirty    = false;
+  return { delta, nVox };
+}
+
+// ── FAST PATH: volume raycast (during drag) ──────────────────────
+function computeProjectionFast() {
+  if (visAtoms.length === 0) return;
+
+  if (volumeDirty || !cachedVolume) buildCachedVolume();
+
+  const NV     = cachedVolGridW;
+  const delta  = cachedVolDelta;
+  const center = NV / 2;
+
+  // R^T maps world-space ray coords → volume (molecule) frame.
+  const m = new THREE.Matrix4().makeRotationFromQuaternion(molecule.quaternion).elements;
+  const r00=m[0],r01=m[1],r02=m[2];
+  const r10=m[4],r11=m[5],r12=m[6];
+  const r20=m[8],r21=m[9],r22=m[10];
+
+  const PGRID = PROJ_GRID;
+  const half  = PGRID / 2;
+  // Scale factor: each output pixel spans NV/PGRID voxels so the two paths
+  // cover the exact same physical box (NV*delta Å) and never mismatch on snap.
+  const pix2vox = NV / PGRID;
+  const grid  = new Float32Array(PGRID * PGRID);
+
+  for (let py = 0; py < PGRID; py++) {
+    const fpy = (py - half) * pix2vox;   // pixel 0 → vox edge at -NV/2, matches accurate path xmin
+    for (let px = 0; px < PGRID; px++) {
+      const fpx = (px - half) * pix2vox;
+      let sum = 0;
+      for (let step = 0; step < NV; step++) {
+        const fpz = step - NV/2 + 0.5;
+        const vox_x = center + r00*fpx + r01*fpy + r02*fpz;
+        const vox_y = center + r10*fpx + r11*fpy + r12*fpz;
+        const vox_z = center + r20*fpx + r21*fpy + r22*fpz;
+
+        const x0i = vox_x|0, y0i = vox_y|0, z0i = vox_z|0;
+        if (x0i<0||x0i>=NV-1||y0i<0||y0i>=NV-1||z0i<0||z0i>=NV-1) continue;
+        const xf=vox_x-x0i, yf=vox_y-y0i, zf=vox_z-z0i;
+        const xf1=1-xf, yf1=1-yf, zf1=1-zf;
+        const s=NV, ss=NV*NV, i000=z0i*ss+y0i*s+x0i;
+        sum +=
+          cachedVolume[i000        ]*xf1*yf1*zf1 + cachedVolume[i000+1      ]*xf*yf1*zf1 +
+          cachedVolume[i000+s      ]*xf1*yf *zf1 + cachedVolume[i000+s+1    ]*xf*yf *zf1 +
+          cachedVolume[i000+ss     ]*xf1*yf1*zf  + cachedVolume[i000+ss+1   ]*xf*yf1*zf  +
+          cachedVolume[i000+ss+s   ]*xf1*yf *zf  + cachedVolume[i000+ss+s+1 ]*xf*yf *zf;
+      }
+      grid[(PGRID-1-py)*PGRID+px] = sum;
+    }
+  }
+
+  renderGrid(grid, PGRID, delta * pix2vox, NV);
+  document.getElementById('s-time').textContent = '— ms';
+}
+
+// ── ACCURATE PATH: per-atom 2D Gaussian sum (on mouseup / load) ─
+function computeProjection() {
+  if (visAtoms.length === 0) return;
+  const t0 = performance.now();
+
+  // Rotate all atoms into world frame
+  const rotM = new THREE.Matrix4().makeRotationFromQuaternion(molecule.quaternion);
+  const tmp  = new THREE.Vector3();
+  const N    = visAtoms.length;
+  const rx   = new Float32Array(N);
+  const ry   = new Float32Array(N);
+
+  for (let i = 0; i < N; i++) {
+    const a = visAtoms[i];
+    tmp.set(a.x, a.y, a.z).applyMatrix4(rotM);
+    rx[i] = tmp.x; ry[i] = tmp.y;
+  }
+
+  // Grid bounds — same physical box and same center as the volume so Å/pixel
+  // matches the fast path exactly.
+  // The volume center is (cx,cy,cz) in molecule space.  After rotation R it
+  // appears at R·(cx,cy,cz).xy in world space — that must be the grid center.
+  const { delta: volDelta, nVox, cx, cy, cz } = getProjectionBox();
+  const span      = nVox * volDelta;           // total box in Å
+  const effDelta  = span / PROJ_GRID;          // Å/pixel — matches fast path
+
+  // Project the bounding-box centre through the current rotation
+  const boxCenWorld = new THREE.Vector3(cx, cy, cz).applyMatrix4(rotM);
+  const xmin = boxCenWorld.x - span / 2;
+  const ymin = boxCenWorld.y - span / 2;
+
+  const PGRID = PROJ_GRID;
+  const grid  = new Float32Array(PGRID * PGRID);
+
+  const elKernelMap = new Map();
+  for (const a of visAtoms)
+    if (!elKernelMap.has(a.el)) elKernelMap.set(a.el, getBFactorKernel(a.el, bFactor));
+
+  let globalCutoff2 = 0;
+  for (const { cutoff2 } of elKernelMap.values()) if (cutoff2 > globalCutoff2) globalCutoff2 = cutoff2;
+  const cellCut = Math.ceil(Math.sqrt(globalCutoff2) / effDelta);
+
+  for (let i = 0; i < N; i++) {
+    const ax = rx[i], ay = ry[i];
+    const { terms, cutoff2 } = elKernelMap.get(visAtoms[i].el);
+    const gxi = Math.round((ax - xmin) / effDelta);
+    const gyi = Math.round((ay - ymin) / effDelta);
+    const x0=Math.max(0,gxi-cellCut), x1=Math.min(PGRID-1,gxi+cellCut);
+    const y0=Math.max(0,gyi-cellCut), y1=Math.min(PGRID-1,gyi+cellCut);
+    for (let gy=y0; gy<=y1; gy++) {
+      const worldY = gy*effDelta+ymin;
+      const dy2 = (worldY-ay)**2;
+      if (dy2 > cutoff2) continue;
+      for (let gx=x0; gx<=x1; gx++) {
+        const rho2 = (gx*effDelta+xmin-ax)**2 + dy2;
+        if (rho2 > cutoff2) continue;
+        let phi = 0;
+        for (const { A, inv2sig2 } of terms) phi += A * Math.exp(-inv2sig2 * rho2);
+        grid[(PGRID-1-gy)*PGRID+gx] += phi;
+      }
+    }
+  }
+
+  renderGrid(grid, PGRID, effDelta, PGRID);
+
+  const elapsed = performance.now() - t0;
+  lastProjTime = elapsed;
+  document.getElementById('s-time').textContent = elapsed.toFixed(1) + ' ms';
+}
+
+// Grayscale colormap — mimics CryoSPARC 2D class averages
+function hotColormap(t) {
+  return Math.pow(Math.min(1, Math.max(0, t)), 0.45) * 255 | 0;
+}
+
+// ════════════════════════════════════════════════════════════
+//  STATS
+// ════════════════════════════════════════════════════════════
+function updateStats() {
+  const residues = new Set(allAtoms.map(a => `${a.chain}:${a.resSeq}`)).size;
+  const chains   = new Set(allAtoms.map(a => a.chain)).size;
+  let xmx=-Infinity,xmn=Infinity,ymx=-Infinity,ymn=Infinity,zmx=-Infinity,zmn=Infinity;
+  for (const a of allAtoms) {
+    xmx=Math.max(xmx,a.x); xmn=Math.min(xmn,a.x);
+    ymx=Math.max(ymx,a.y); ymn=Math.min(ymn,a.y);
+    zmx=Math.max(zmx,a.z); zmn=Math.min(zmn,a.z);
+  }
+  document.getElementById('s-atoms').textContent  = allAtoms.length.toLocaleString();
+  document.getElementById('s-res').textContent    = residues.toLocaleString();
+  document.getElementById('s-chains').textContent = chains;
+  document.getElementById('s-size').textContent   =
+    `${(xmx-xmn).toFixed(0)}×${(ymx-ymn).toFixed(0)}×${(zmx-zmn).toFixed(0)}`;
+  // s-box and s-pixel are filled by renderGrid after first projection
+}
+
+// ════════════════════════════════════════════════════════════
+//  ANIMATION LOOP
+// ════════════════════════════════════════════════════════════
+let projThrottle = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (projNeedsUpdate) {
+    projThrottle++;
+    if (projThrottle >= 2) { // update every 2nd frame during drag
+      computeProjectionFast();
+      projNeedsUpdate = false;
+      projThrottle = 0;
+    }
+  }
+
+  renderer.render(scene, camera);
+
+  // FPS
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsLast > 1000) {
+    fps = fpsFrames;
+    fpsFrames = 0;
+    fpsLast = now;
+    document.getElementById('fps-display').textContent = `${fps} fps`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  CONTROLS & EVENTS
+// ════════════════════════════════════════════════════════════
+// Step a slider by ±1 tick and fire its input event
+function stepSlider(id, dir) {
+  const el = document.getElementById(id);
+  const step = parseFloat(el.step) || 1;
+  const val  = Math.min(parseFloat(el.max), Math.max(parseFloat(el.min), parseFloat(el.value) + dir * step));
+  el.value = val;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setupControls() {
+  const bind = (id, cb) => document.getElementById(id).addEventListener('input', cb);
+
+  bind('r-sigma', e => {
+    bFactor = parseFloat(e.target.value);   // B in Å², set directly
+    document.getElementById('v-sigma').textContent = bFactor.toFixed(0);
+    volumeDirty = true;
+    if (allAtoms.length) { computeProjection(); }
+  });
+
+  bind('r-bright', e => {
+    brightness = parseFloat(e.target.value);
+    document.getElementById('v-bright').textContent = brightness.toFixed(1) + '×';
+    if (allAtoms.length) { computeProjection(); }
+  });
+
+  bind('r-ambient', e => {
+    ambientStr = parseFloat(e.target.value);
+    document.getElementById('v-ambient').textContent = ambientStr.toFixed(2) + '×';
+    if (ambientLight) ambientLight.intensity = ambientStr;
+  });
+
+  // Grid resolution: select element with discrete pixel options
+  document.getElementById('r-grid').addEventListener('change', e => {
+    PROJ_GRID = parseInt(e.target.value);
+    volumeDirty = true;
+    if (allAtoms.length) computeProjection();
+  });
+  PROJ_GRID = 128; // match the default selected option
+
+  bind('r-boxmult', e => {
+    boxMultiplier = parseFloat(e.target.value);
+    document.getElementById('v-boxmult').textContent = boxMultiplier.toFixed(1) + '×';
+    // Recompute the full projection box with new multiplier
+    if (allAtoms.length) {
+      fullProjBox  = computeProjBoxFrom(allAtoms);
+      activeProjBox = null;
+      volumeDirty  = true;
+      computeProjection();
+    }
+  });
+}
+
+function setupEvents() {
+  const fileInput   = document.getElementById('file-input');
+  const canvas      = document.getElementById('three-canvas');
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  // Drag & drop
+  window.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragover'); });
+  window.addEventListener('dragleave', e => {
+    if (!e.relatedTarget) document.body.classList.remove('dragover');
+  });
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    document.body.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  // Mouse drag → rotate molecule
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true;
+    prevMouse = { x: e.clientX, y: e.clientY };
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - prevMouse.x;
+    const dy = e.clientY - prevMouse.y;
+    prevMouse = { x: e.clientX, y: e.clientY };
+    // Arcball: rotate around world-space Y for horizontal drag,
+    // world-space X for vertical drag. Compose with current quaternion
+    // so accumulated rotations never conflict.
+    const qY = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0), dx * 0.008);
+    const qX = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0), dy * 0.008);
+    molecule.quaternion.premultiply(qY).premultiply(qX);
+    projNeedsUpdate = true;
+  });
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      canvas.classList.remove('dragging');
+      projNeedsUpdate = false;  // prevent animate loop from overwriting with fast path
+      projThrottle = 0;
+      if (allAtoms.length) computeProjection();
+    }
+  });
+
+  // Scroll to zoom
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    camera.position.z = Math.max(5, Math.min(800, camera.position.z + e.deltaY * 0.08));
+  }, { passive: false });
+
+  // Touch drag
+  let lastTouch = null;
+  canvas.addEventListener('touchstart', e => {
+    lastTouch = e.touches[0];
+  }, { passive: true });
+  canvas.addEventListener('touchmove', e => {
+    if (!lastTouch) return;
+    const t = e.touches[0];
+    const dx = t.clientX - lastTouch.clientX;
+    const dy = t.clientY - lastTouch.clientY;
+    lastTouch = t;
+    const qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), dx * 0.01);
+    const qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), dy * 0.01);
+    molecule.quaternion.premultiply(qY).premultiply(qX);
+    projNeedsUpdate = true;
+  }, { passive: true });
+  canvas.addEventListener('touchend', () => {
+    lastTouch = null;
+    projNeedsUpdate = false;
+    projThrottle = 0;
+    if (allAtoms.length) computeProjection();
+  });
+
+  // Resize window
+  window.addEventListener('resize', () => {
+    const panel = document.getElementById('viewer-panel');
+    const W = panel.clientWidth, H = panel.clientHeight;
+    camera.aspect = W/H;
+    camera.updateProjectionMatrix();
+    renderer.setSize(W, H);
+  });
+
+  // ── Drag handle: resize stats vs controls panel ──────────────
+  const handle = document.getElementById('resize-handle');
+  const statsSection = document.getElementById('stats-section');
+  let resizeDragging = false, resizeStartY = 0, resizeStartH = 0;
+
+  handle.addEventListener('mousedown', e => {
+    resizeDragging = true;
+    resizeStartY = e.clientY;
+    resizeStartH = statsSection.offsetHeight;
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!resizeDragging) return;
+    const dy = e.clientY - resizeStartY;
+    const newH = Math.max(40, Math.min(300, resizeStartH + dy));
+    statsSection.style.flexShrink = '0';
+    statsSection.style.height = newH + 'px';
+    statsSection.style.overflow = 'hidden';
+  });
+  window.addEventListener('mouseup', e => {
+    if (resizeDragging) {
+      resizeDragging = false;
+      document.body.style.userSelect = '';
+    }
+  });
+}
+// ════════════════════════════════════════════════════════════
+//  CHAIN VISIBILITY — text-input based
+// ════════════════════════════════════════════════════════════
+function buildChainPanel() {
+  hiddenChains.clear();
+  const chains = [...new Set(allAtoms.map(a => a.chain))].sort();
+  const section   = document.getElementById('chain-section');
+  const available = document.getElementById('chain-available');
+  const input     = document.getElementById('chain-hide-input');
+
+  if (chains.length <= 1) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  input.value = '';
+  input.classList.remove('invalid');
+
+  // Render clickable chain chips
+  renderChainChips(chains);
+
+  // Enter key applies
+  input.onkeydown = e => { if (e.key === 'Enter') applyChainInput(); };
+}
+
+function renderChainChips(chains) {
+  const available = document.getElementById('chain-available');
+  if (!available) return;
+  const allChains = chains || [...new Set(allAtoms.map(a => a.chain))].sort();
+  available.innerHTML = allChains.map(c => {
+    const isHidden = hiddenChains.has(c);
+    return `<span class="chain-id${isHidden ? ' hidden-chip' : ''}" title="Click to toggle chain ${c}" onclick="quickToggleChain('${c}')">${c}</span>`;
+  }).join('');
+}
+
+function quickToggleChain(chain) {
+  // Click on a chip: toggle that single chain and sync the text input
+  if (hiddenChains.has(chain)) hiddenChains.delete(chain);
+  else hiddenChains.add(chain);
+
+  // Sync input field to current hidden set
+  const input = document.getElementById('chain-hide-input');
+  if (input) {
+    input.value = [...hiddenChains].sort().join(',');
+    input.classList.remove('invalid');
+  }
+  const allChains = [...new Set(allAtoms.map(a => a.chain))].sort();
+  renderChainChips(allChains);
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+function applyChainInput() {
+  const input = document.getElementById('chain-hide-input');
+  if (!input) return;
+
+  const raw   = input.value.trim();
+  const allChains = new Set(allAtoms.map(a => a.chain));
+
+  if (!raw) {
+    // Empty = show all
+    hiddenChains.clear();
+    input.classList.remove('invalid');
+  } else {
+    const requested = raw.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+    // Validate — every token must be a known chain
+    const invalid = requested.filter(c => !allChains.has(c));
+    if (invalid.length) {
+      input.classList.add('invalid');
+      setStatus(`⚠ Unknown chain(s): ${invalid.join(', ')}`);
+      return;
+    }
+    input.classList.remove('invalid');
+    hiddenChains = new Set(requested);
+  }
+
+  renderChainChips([...allChains].sort());
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+function reboxProjection(mode) {
+  if (mode === 'reset') {
+    activeProjBox = null;
+  } else if (mode === 'rebox') {
+    // Recompute both box and center from visible atoms
+    activeProjBox = computeProjBoxFrom(visAtoms.length ? visAtoms : allAtoms);
+  }
+
+  // Visual feedback: highlight active button
+  ['btn-rebox','btn-resetbox'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.borderColor = '';
+  });
+  if (mode !== 'reset') {
+    const el = document.getElementById('btn-rebox');
+    if (el) el.style.borderColor = 'var(--cyan)';
+  }
+
+  volumeDirty = true;
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+// ════════════════════════════════════════════════════════════
+//  TOGGLE HANDLERS
+// ════════════════════════════════════════════════════════════
+
+function toggleFootnote() {
+  const fn  = document.getElementById('footnote');
+  const btn = document.getElementById('footnote-toggle');
+  const hiding = !fn.classList.contains('hidden');
+  fn.classList.toggle('hidden', hiding);
+  btn.classList.toggle('on', !hiding);
+  btn.textContent = hiding ? 'METHOD ▸' : 'METHOD ▾';
+}
+
+function toggleCartoon() {
+  cartoonMode = !cartoonMode;
+  document.getElementById('t-cartoon').classList.toggle('on', cartoonMode);
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+function toggleHetatm() {
+  showHetatm = !showHetatm;
+  const el = document.getElementById('t-hetatm');
+  el.classList.toggle('on', showHetatm);
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+// ════════════════════════════════════════════════════════════
+//  UTILITY BUTTONS
+// ════════════════════════════════════════════════════════════
+function resetView() {
+  molecule.quaternion.identity();
+  molecule.position.set(0, 0, 0);
+  if (allAtoms.length) computeProjection();
+}
+
+function alignView(axis) {
+  const e = new THREE.Euler();
+  if (axis === 'x') e.set(0, Math.PI/2, 0);
+  if (axis === 'y') e.set(Math.PI/2, 0, 0);
+  if (axis === 'z') e.set(0, 0, 0);
+  molecule.quaternion.setFromEuler(e);
+  if (allAtoms.length) computeProjection();
+}
+
+function saveProjection() {
+  const a = document.createElement('a');
+  a.href = projCanvas.toDataURL('image/png');
+  a.download = 'molproj_projection.png';
+  a.click();
+}
+
+// ════════════════════════════════════════════════════════════
+//  STATUS
+// ════════════════════════════════════════════════════════════
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+}
+
+// ════════════════════════════════════════════════════════════
+//  START
+// ════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
