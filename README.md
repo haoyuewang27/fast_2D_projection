@@ -1,6 +1,6 @@
 ![Vibe coded with Claude](https://img.shields.io/badge/vibe%20coded%20with-Claude-6ec6b8)
 # fast_2D_projection
-A website that can do real time theoretical EM 2D projections from an uploaded pdb or cif file. Run locally on your computer. Just open the page in your own browser! **Let me know what other features you would like to use!**
+A website that can do real time theoretical EM 2D projections from an uploaded pdb or cif file. Just open the page in your own browser! **Let me know what other features you would like to use!**
 
 **No installation. No server. No build step.**
 
