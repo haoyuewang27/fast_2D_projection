@@ -1,13 +1,16 @@
 ![Vibe coded with Claude](https://img.shields.io/badge/vibe%20coded%20with-Claude-6ec6b8)
 # fast_2D_projection
-A website that can do real time theoretical EM 2D projections from an uploaded pdb or cif file. Run locally on your computer. Just download, double click and run in your own browser! **Let me know what other features you would like to use!**
+A website that can do real time theoretical EM 2D projections from an uploaded pdb or cif file. Run locally on your computer. Just open the page in your own browser! **Let me know what other features you would like to use!**
 
 **No installation. No server. No build step.**
 
+1.Click [Open in browser](https://haoyuewang27.github.io/fast_2D_projection/) (Thanks to Daniel for the website deployment setting!)
+3. Double click it and open it in any modern browser (Chrome, Safari, ...)
+4. Drag and drop a `.pdb` or `.cif` / `.mmcif` file onto the window, or click **Load PDB**
 
-1. Download [`Fast_2D_Projection_Visualization_v0.2.html`](https://github.com/haoyuewang27/fast_2D_projection/blob/main/Fast_2D_Projection_Visualization_v0.2.html)
-2. Double click it and open it in any modern browser (Chrome, Safari, ...)
-3. Drag and drop a `.pdb` or `.cif` / `.mmcif` file onto the window, or click **Load PDB**
+If you prefer to download your own copy of the html file:
+Download [`Fast_2D_Projection_Visualization_v0.2.html`](https://github.com/haoyuewang27/fast_2D_projection/blob/main/Fast_2D_Projection_Visualization_v0.2.html)
+Double-click the file and it will open in your own browser!
 
 **Load, drag, and view**
 
