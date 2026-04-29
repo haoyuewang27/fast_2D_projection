@@ -1,0 +1,61 @@
+# Deploy the Fast 2D Projection Visualization to GitHub Pages
+name: Deploy to GitHub Pages
+
+on:
+  # Runs on pushes targeting the main branch
+  push:
+    branches: ["main"]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Cancel in-progress deployments when a new one is triggered
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the repository
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Verify that the HTML file exists before proceeding
+      - name: Validate HTML file exists
+        run: |
+          if [ ! -f "Fast_2D_Projection_Visualization_v0.2.html" ]; then
+            echo "::error::Fast_2D_Projection_Visualization_v0.2.html not found!"
+            exit 1
+          fi
+
+      # Stage only the needed files into a clean deploy directory
+      - name: Prepare deploy directory
+        run: |
+          mkdir deploy
+          cp Fast_2D_Projection_Visualization_v0.2.html deploy/
+          cp index.html deploy/
+
+      # Configure GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # Upload the deploy directory as a Pages artifact
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'deploy'
+
+      # Deploy the artifact to GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
