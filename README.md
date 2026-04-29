@@ -10,7 +10,9 @@ A website that can do real time theoretical EM 2D projections from an uploaded p
 
 
 If you prefer to download your own copy of the html file:
+
 Download [`Fast_2D_Projection_Visualization_v0.2.html`](https://github.com/haoyuewang27/fast_2D_projection/blob/main/Fast_2D_Projection_Visualization_v0.2.html)
+
 Then double click it and it should open in any modern browser (Chrome, Safari, ...)
 
 **Load, drag, and view**
