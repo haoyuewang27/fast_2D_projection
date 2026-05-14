@@ -33,8 +33,8 @@ jobs:
       # Verify that the HTML file exists before proceeding
       - name: Validate HTML file exists
         run: |
-          if [ ! -f "Fast_2D_Projection_Visualization_v0.2.html" ]; then
-            echo "::error::Fast_2D_Projection_Visualization_v0.2.html not found!"
+          if [ ! -f "Fast_2D_Projection_Visualization_v0.3.html" ]; then
+            echo "::error::Fast_2D_Projection_Visualization_v0.3.html not found!"
             exit 1
           fi
 
@@ -42,7 +42,7 @@ jobs:
       - name: Prepare deploy directory
         run: |
           mkdir deploy
-          cp Fast_2D_Projection_Visualization_v0.2.html deploy/
+          cp Fast_2D_Projection_Visualization_v0.3.html deploy/
           cp index.html deploy/
 
       # Configure GitHub Pages
