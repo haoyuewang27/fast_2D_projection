@@ -19,7 +19,7 @@ A website that can do real time theoretical EM 2D projections from an uploaded p
 
 
 For a deployed static website (like this one!), the page loads into your browser cache and runs locally on your computer. **Your uploaded PDB file is never sent anywhere — it's just as safe as downloading and opening it locally**. But if you prefer to download your own copy of the html file permanently: 
-(1) Download [`Fast_2D_Projection_Visualization_v0.3.html`](https://github.com/haoyuewang27/fast_2D_projection/blob/main/Fast_2D_Projection_Visualization_v0.3.html)
+(1) Download [`Fast_2D_Projection_Visualization_v0.9.html`](https://github.com/haoyuewang27/fast_2D_projection/blob/main/Fast_2D_Projection_Visualization_v0.9.html)
 (2) Double click it and it should open in any modern browser (Chrome, Safari, ...)
 
 ## Physics
