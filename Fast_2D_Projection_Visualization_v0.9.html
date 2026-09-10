@@ -1,0 +1,3338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fast 2D Projection Visualization</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ─── Reset & Root ─────────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:       #06070f;
+  --panel:    #0c0e1a;
+  --surface:  #111428;
+  --border:   #1e2240;
+  --border2:  #2a2f58;
+  --accent:     #6ec6b8;
+  --accent-dim: rgba(110,198,184,0.12);
+  --cyan:     #6ec6b8;
+  --cyan-dim: rgba(110,198,184,0.12);
+  --amber:    #ffaa00;
+  --amber-dim:rgba(255,170,0,0.12);
+  --green:    #00ff88;
+  --text:     #cdd6f4;
+  --muted:    #6272a4;
+  --dim:      #3d4166;
+  --red:      #ff5555;
+}
+
+html, body { width: 100%; height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  flex-direction: column;
+  /* subtle grid texture */
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: -1px -1px;
+}
+
+/* ─── Header ────────────────────────────────────────────── */
+#header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 20px;
+  background: rgba(12,14,26,0.95);
+  border-bottom: 1px solid var(--border2);
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  z-index: 100;
+  position: relative;
+}
+
+.logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-hex {
+  width: 40px; height: 40px;
+  position: relative;
+  flex-shrink: 0;
+}
+.logo-hex svg { width: 100%; height: 100%; }
+
+.logo-text {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--cyan);
+}
+.logo-sub {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: block;
+  margin-top: -2px;
+}
+
+.header-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border2);
+}
+
+.header-info {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.header-info span { color: var(--cyan); }
+
+.spacer { flex: 1; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.badge-cyan  { background: var(--cyan-dim);  color: var(--cyan);  border: 1px solid rgba(110,198,184,0.3); }
+.badge-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(255,170,0,0.25); }
+
+.upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  padding: 7px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.upload-btn:hover {
+  background: var(--cyan-dim);
+  box-shadow: 0 0 12px rgba(110,198,184,0.2);
+}
+.upload-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* ─── Main Layout ───────────────────────────────────────── */
+#main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── 3D Viewer Panel ───────────────────────────────────── */
+#viewer-panel {
+  flex: 1;
+  position: relative;
+  background: #000008;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#three-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  cursor: grab;
+  user-select: none;
+}
+#three-canvas.dragging { cursor: grabbing; }
+
+/* viewer corner labels */
+.corner-label {
+  position: absolute;
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+.corner-tl { top: 12px; left: 14px; }
+.corner-br { bottom: 12px; right: 14px; }
+
+#hint-text {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* axis indicator */
+#axis-indicator {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  width: 60px;
+  height: 60px;
+  pointer-events: none;
+}
+
+/* ─── Right Panel ───────────────────────────────────────── */
+#right-panel {
+  width: 290px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(12,14,26,0.97);
+  border-left: 1px solid var(--border2);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.panel-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.section-header {
+  padding: 9px 14px;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(17,20,40,0.5);
+}
+.section-header::before {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 12px;
+  background: var(--cyan);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* projection canvas */
+#proj-wrap {
+  background: #000;
+  display: block;
+  padding: 8px;
+  position: relative;
+  flex-shrink: 0;
+}
+#proj-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  width: 100%;
+  aspect-ratio: 1;
+  display: block;
+}
+
+.proj-corner {
+  position: absolute;
+  font-size: 8px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+.proj-tl { top: 6px; left: 8px; }
+.proj-br { bottom: 6px; right: 8px; }
+
+/* colorbar */
+#colorbar-wrap {
+  padding: 6px 14px 8px;
+}
+.colorbar {
+  height: 6px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #000000 0%, #ffffff 100%);
+  border: 1px solid var(--border);
+}
+.colorbar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: var(--dim);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* stats */
+#stats-section { overflow: hidden; display: flex; flex-direction: column; }
+#stats-panel { padding: 10px 14px; overflow-y: auto; flex: 1; }
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 10px;
+  border-bottom: 1px solid rgba(30,34,64,0.5);
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-key { color: var(--muted); }
+.stat-val { color: var(--cyan); font-weight: 600; }
+.stat-val.amber { color: var(--amber); }
+.stat-val.green { color: var(--green); }
+
+/* controls */
+#controls-panel { padding: 12px 14px; }
+.ctrl-group { margin-bottom: 14px; }
+.ctrl-label {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+.ctrl-label span { color: var(--amber); font-size: 10px; text-transform: none; letter-spacing: 0; }
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.ctrl-row input[type=range] { flex: 1; }
+
+.step-btn {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  transition: all 0.12s;
+  user-select: none;
+}
+.step-btn:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+.step-btn:active { transform: scale(0.88); }
+
+input[type=range] {
+  width: 100%;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border2);
+  border-radius: 2px;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(110,198,184,0.4);
+}
+input[type=range]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--cyan);
+  cursor: pointer;
+  border: none;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.toggle {
+  width: 32px; height: 16px;
+  background: var(--border2);
+  border-radius: 8px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--cyan); }
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: left 0.15s;
+}
+.toggle.on::after { left: 18px; }
+
+.btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.mini-btn {
+  flex: 1;
+  padding: 6px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mini-btn:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+
+/* ─── Drop Zone ─────────────────────────────────────────── */
+#drop-zone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6,7,15,0.96);
+  z-index: 50;
+  gap: 0;
+  transition: opacity 0.3s;
+}
+#drop-zone.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.drop-ring {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  border: 2px solid var(--border2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 28px;
+  position: relative;
+}
+.drop-ring::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.drop-ring svg {
+  width: 48px; height: 48px;
+  opacity: 0.5;
+}
+.drop-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.drop-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+.drop-hint {
+  font-size: 10px;
+  color: var(--dim);
+  margin-bottom: 24px;
+  letter-spacing: 0.08em;
+}
+.drop-specs {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+.spec-item {
+  text-align: center;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--panel);
+}
+.spec-val { font-size: 13px; color: var(--cyan); font-weight: 600; display: block; }
+.spec-key { font-size: 8px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; margin-top: 2px; display: block; }
+
+/* ─── Status Bar ────────────────────────────────────────── */
+#status-bar {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: rgba(12,14,26,0.95);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex-shrink: 0;
+}
+.status-dot.active {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+#status-text { flex: 1; }
+#fps-display { color: var(--dim); }
+
+/* ─── Drag-over highlight ───────────────────────────────── */
+body.dragover #viewer-panel { outline: 2px dashed var(--cyan); outline-offset: -4px; }
+
+/* ─── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ─── Animations ────────────────────────────────────────── */
+@keyframes fadeIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: none; } }
+#right-panel { animation: fadeIn 0.4s ease both; }
+#header { animation: fadeIn 0.3s ease both; }
+
+/* ─── Scale bar ─────────────────────────────────────────── */
+#scalebar-wrap {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  pointer-events: none;
+}
+#scalebar-line {
+  height: 3px;
+  background: var(--cyan);
+  border-radius: 1px;
+  width: 40px; /* updated dynamically */
+  opacity: 0.8;
+}
+#scalebar-label {
+  font-size: 8px;
+  color: var(--cyan);
+  letter-spacing: 0.06em;
+}
+
+
+#proj-spinner {
+  display: none;
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: 20px; height: 20px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+/* ─── Footnote (full-width page footer, always visible) ─────── */
+#footnote {
+  padding: 7px 20px;
+  font-size: 8px;
+  color: var(--dim);
+  line-height: 1.7;
+  border-top: 1px solid var(--border);
+  background: rgba(12,14,26,0.97);
+  flex-shrink: 0;
+  overflow: hidden;
+  max-height: 120px;
+  opacity: 1;
+  transition: max-height 0.25s ease, padding 0.25s ease, opacity 0.2s ease, border-top-color 0.2s ease;
+}
+#footnote.hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  border-top-color: transparent;
+}
+#footnote strong { color: var(--muted); font-weight: 600; }
+#footnote em     { font-style: normal; color: var(--amber); }
+
+#footnote-toggle {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  padding: 1px 6px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+#footnote-toggle:hover, #footnote-toggle.on {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
+/* ─── Resize handle between stats & controls ────────────── */
+#resize-handle {
+  height: 5px;
+  background: transparent;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+#resize-handle:hover { background: var(--cyan-dim); }
+#resize-handle::after {
+  content: '';
+  width: 24px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--dim);
+}
+
+/* ─── Chain hide input panel ─────────────────────────────── */
+#chain-section { margin-bottom: 14px; display: none; }
+#chain-available {
+  font-size: 9px;
+  color: var(--dim);
+  margin-bottom: 5px;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+}
+#chain-available .chain-id {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 1px 2px;
+  border: 1px solid var(--border2);
+  border-radius: 2px;
+  color: var(--cyan);
+  font-size: 9px;
+  cursor: pointer;
+  transition: all 0.12s;
+  user-select: none;
+}
+#chain-available .chain-id:hover {
+  background: var(--cyan-dim);
+  border-color: var(--cyan);
+}
+#chain-available .chain-id.hidden-chip {
+  color: var(--dim);
+  border-color: var(--dim);
+  text-decoration: line-through;
+  background: transparent;
+}
+
+.chain-input-row {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+#chain-hide-input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 4px 7px;
+  outline: none;
+  letter-spacing: 0.06em;
+  transition: border-color 0.15s;
+  min-width: 0;
+}
+#chain-hide-input::placeholder { color: var(--dim); }
+#chain-hide-input:focus { border-color: var(--cyan); }
+#chain-hide-input.invalid { border-color: var(--red); }
+
+#chain-apply-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.12s;
+  text-transform: uppercase;
+}
+#chain-apply-btn:hover { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-dim); }
+
+/* ─── Normalization tabs ─────────────────────────────────── */
+.norm-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.norm-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 3px 0;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.norm-tab + .norm-tab { border-left: 1px solid var(--border2); }
+.norm-tab:hover { background: var(--cyan-dim); color: var(--cyan); }
+.norm-tab.active { background: var(--cyan-dim); color: var(--cyan); font-weight: 600; }
+
+
+select {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 5px 7px;
+  outline: none;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236272a4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+select:focus { border-color: var(--cyan); }
+select option { background: var(--surface); color: var(--text); }
+
+
+#info-toggle {
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  padding: 1px 6px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+#info-toggle:hover, #info-toggle.on {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: var(--cyan-dim);
+}
+
+
+/* ChimeraX export modal */
+#cxc-modal {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,2,8,0.72);
+  z-index: 200;
+  align-items: center; justify-content: center;
+}
+#cxc-box {
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 16px 18px;
+  width: min(680px, 90vw);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+#cxc-title {
+  font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--cyan); margin-bottom: 4px;
+}
+#cxc-sub { font-size: 10px; color: var(--muted); margin-bottom: 10px; }
+#cxc-text {
+  width: 100%; height: 150px; resize: vertical;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 3px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10.5px; line-height: 1.5; padding: 8px 10px;
+  white-space: pre; overflow-wrap: normal; overflow-x: auto;
+}
+#cxc-text:focus { outline: none; border-color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────── -->
+<div id="header">
+  <div class="logo-mark">
+    <div class="logo-hex">
+      <svg viewBox="0 0 48 48" fill="none" stroke="#6ec6b8" stroke-width="1.5">
+        <circle cx="24" cy="18" r="6"/>
+        <ellipse cx="24" cy="30" rx="12" ry="6"/>
+        <circle cx="24" cy="10" r="2" fill="#6ec6b8" stroke="none"/>
+        <circle cx="30" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+        <circle cx="18" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Fast 2D Projection</div>
+      <span class="logo-sub">Visualization</span>
+    </div>
+  </div>
+  <div class="header-divider"></div>
+  <div class="header-info">
+    Drag and See <span>Real-time projection</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M8 10V3M5 6l3-3 3 3M3 11v2h10v-2"/>
+    </svg>
+    Load PDB
+  </button>
+  <input type="file" id="file-input" accept=".pdb,.cif,.mmcif" style="display:none">
+</div>
+
+<!-- ── Main ───────────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- 3D Viewer -->
+  <div id="viewer-panel">
+    <canvas id="three-canvas"></canvas>
+
+    <!-- Drop zone overlay -->
+    <div id="drop-zone">
+      <div class="drop-ring">
+        <svg viewBox="0 0 48 48" fill="none" stroke="#6ec6b8" stroke-width="1.5">
+          <circle cx="24" cy="18" r="6"/>
+          <ellipse cx="24" cy="30" rx="12" ry="6"/>
+          <circle cx="24" cy="10" r="2" fill="#6ec6b8" stroke="none"/>
+          <circle cx="30" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+          <circle cx="18" cy="27" r="2" fill="#6ec6b8" stroke="none"/>
+        </svg>
+      </div>
+      <div class="drop-title">PDB Quick Projector</div>
+      <div class="drop-sub">Upload a structure file to begin visualization</div>
+      <div class="drop-hint">Drag & drop anywhere · or click to browse</div>
+      <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M8 10V3M5 6l3-3 3 3M3 11v2h10v-2"/>
+        </svg>
+        Choose .pdb / .cif File
+      </button>
+      <div class="drop-specs" style="display:none"></div>
+    </div>
+
+    <!-- Corner labels -->
+    <div class="corner-label corner-tl">3D VIEW</div>
+    <div class="corner-label corner-br" id="view-corner-br">DRAG TO ROTATE · SCROLL TO ZOOM</div>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="right-panel">
+
+    <!-- Projection section -->
+    <div class="panel-section">
+      <div class="section-header">2D Projection</div>
+      <div id="proj-wrap">
+        <canvas id="proj-canvas" width="128" height="128"></canvas>
+        <div class="proj-corner proj-tl">XY PLANE</div>
+        <div id="proj-spinner"></div>
+        <!-- Scale bar -->
+        <div id="scalebar-wrap">
+          <div id="scalebar-line"></div>
+          <div id="scalebar-label">—</div>
+        </div>
+      </div>
+      <div id="colorbar-wrap">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+          <span style="font-size:8px;color:var(--dim);letter-spacing:0.08em;text-transform:uppercase;">Normalize</span>
+          <div class="norm-tabs">
+            <button class="norm-tab"        id="ntab-p99"  onclick="setNormMode('p99')">99%</button>
+            <button class="norm-tab active" id="ntab-p100" onclick="setNormMode('p100')">100%</button>
+          </div>
+        </div>
+        <div class="colorbar"></div>
+        <div class="colorbar-labels"><span>0</span><span>Density</span><span>max</span></div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel-section" id="stats-section">
+      <div class="section-header">Structure Info</div>
+      <div id="stats-panel">
+        <div class="stat-row"><span class="stat-key">ATOMS</span><span class="stat-val" id="s-atoms">—</span></div>
+        <div class="stat-row"><span class="stat-key">RESIDUES</span><span class="stat-val" id="s-res">—</span></div>
+        <div class="stat-row"><span class="stat-key">CHAINS</span><span class="stat-val" id="s-chains">—</span></div>
+        <div class="stat-row"><span class="stat-key">MOLECULE (Å)</span><span class="stat-val amber" id="s-size">—</span></div>
+        <div class="stat-row">
+          <span class="stat-key" title="Square box used for 2D projection (2× longest molecule dimension)">BOX SIZE (Å)</span>
+          <span class="stat-val amber" id="s-box">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-key" title="Ångströms per pixel in the 2D projection">PIXEL SIZE (Å/px)</span>
+          <span class="stat-val green" id="s-pixel">—</span>
+        </div>
+        <div class="stat-row"><span class="stat-key">PROJ TIME</span><span class="stat-val green" id="s-time">—</span></div>
+      </div>
+    </div>
+
+    <!-- Drag handle -->
+    <div id="resize-handle" title="Drag to resize"></div>
+
+    <!-- Controls (header fixed, content scrolls) -->
+    <div class="panel-section" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div class="section-header" style="flex-shrink:0;">Controls</div>
+      <div id="controls-panel" style="flex:1;overflow-y:auto;">
+
+        <div class="toggle-row" style="margin-top:-2px;">
+          <span>Low-pass filter</span>
+          <div class="toggle on" id="t-lowpass" onclick="toggleLowpass()"></div>
+        </div>
+
+        <div class="ctrl-group" id="lp-group">
+          <div class="ctrl-label">Low-pass res. (Å) <span id="v-lowpass">6.0</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-lowpass',-1)">▼</button>
+            <input type="range" id="r-lowpass" min="2" max="40" step="0.5" value="6">
+            <button class="step-btn" onclick="stepSlider('r-lowpass',+1)">▲</button>
+          </div>
+          <div id="lp-note" style="font-size:9px;letter-spacing:0.6px;color:var(--muted);margin-top:4px;">—</div>
+        </div>
+
+        <div class="ctrl-group" id="lptaper-group">
+          <div class="ctrl-label">Roll-off width <span id="v-lptaper">1.00× k<sub>c</sub></span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-lptaper',-1)">▼</button>
+            <input type="range" id="r-lptaper" min="0.05" max="2" step="0.05" value="1.0">
+            <button class="step-btn" onclick="stepSlider('r-lptaper',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Brightness <span id="v-bright">1.0×</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-bright',-1)">▼</button>
+            <input type="range" id="r-bright" min="0.2" max="8" step="0.1" value="1.0">
+            <button class="step-btn" onclick="stepSlider('r-bright',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Ambient light <span id="v-ambient">0.60×</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-ambient',-1)">▼</button>
+            <input type="range" id="r-ambient" min="0" max="2" step="0.05" value="0.6">
+            <button class="step-btn" onclick="stepSlider('r-ambient',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Box Grid (px)</div>
+          <select id="r-grid">
+            <option value="128" selected>128 px</option>
+            <option value="192">192 px</option>
+            <option value="256">256 px</option>
+            <option value="384">384 px</option>
+            <option value="512">512 px</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
+          <div class="ctrl-label">Box Size <span id="v-boxmult">2.0×</span></div>
+          <div class="ctrl-row">
+            <button class="step-btn" onclick="stepSlider('r-boxmult',-1)">▼</button>
+            <input type="range" id="r-boxmult" min="1.0" max="6.0" step="0.1" value="2.0">
+            <button class="step-btn" onclick="stepSlider('r-boxmult',+1)">▲</button>
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <span>Cartoon view</span>
+          <div class="toggle on" id="t-cartoon" onclick="toggleCartoon()"></div>
+        </div>
+        <div class="toggle-row">
+          <span>Heteroatoms</span>
+          <div class="toggle on" id="t-hetatm" onclick="toggleHetatm()"></div>
+        </div>
+
+        <!-- Chain visibility -->
+        <div id="chain-section">
+          <div class="ctrl-label" style="margin-bottom:5px;">Hide Chains</div>
+          <div id="chain-available"></div>
+          <div class="chain-input-row">
+            <input type="text" id="chain-hide-input" placeholder="e.g. A or A,B,C" spellcheck="false" autocomplete="off">
+            <button id="chain-apply-btn" onclick="applyChainInput()">Apply</button>
+          </div>
+          <div class="btn-row" style="margin-top:6px;">
+            <button class="mini-btn" id="btn-rebox"    onclick="reboxProjection('rebox')"    title="Recenter and rebox projection + 3D view to visible chains">Recenter</button>
+            <button class="mini-btn" id="btn-resetbox" onclick="reboxProjection('reset')"    title="Restore full-structure box, center, and 3D position" style="color:var(--dim);">Reset Box</button>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="mini-btn" onclick="resetView()">Reset View</button>
+          <button class="mini-btn" onclick="saveProjection()">Save Proj.</button>
+        </div>
+        <div class="btn-row">
+          <button class="mini-btn" onclick="exportChimeraX()" title="Export this orientation as ChimeraX view matrix commands">CXC Export</button>
+          <button class="mini-btn" onclick="importChimeraX()" title="Paste ChimeraX 'view matrix' output to set this orientation">CXC Import</button>
+        </div>
+        <div class="btn-row">
+          <button class="mini-btn" onclick="alignView('x')">View X</button>
+          <button class="mini-btn" onclick="alignView('y')">View Y</button>
+          <button class="mini-btn" onclick="alignView('z')">View Z</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /right-panel -->
+</div><!-- /main -->
+
+<!-- ── Status Bar ─────────────────────────────────────────── -->
+<div id="status-bar">
+  <div class="status-dot" id="status-dot"></div>
+  <span id="status-text">Ready — load a .pdb file to begin</span>
+  <span id="fps-display"></span>
+  <button id="footnote-toggle" onclick="toggleFootnote()" title="Show/hide projection method notes">METHOD ▾</button>
+</div>
+
+<!-- ── Footnote (full-width, always visible) ──────────────── -->
+<div id="footnote">
+  <strong>Projection method —</strong>
+  The electron scattering factor of each atom is parameterized as a sum of 5 Gaussians
+  using Peng 1996 tabulated coefficients (Acta Cryst. A52, 257–276, Table 1; all elements Z = 1–98): <em>f(s) = Σᵢ aᵢ exp(−bᵢ s²)</em>, where
+  <em>s = sinθ/λ</em> (Å⁻¹) is the Peng scattering parameter (= 1/(2d) for Bragg
+  spacing d), <em>aᵢ</em> (Å) and <em>bᵢ</em> (Å²) are element-specific coefficients
+  fit to electron diffraction data.
+  The 2D projected density per atom is obtained analytically from the 2D inverse Fourier
+  transform of each Gaussian slice (projection-slice theorem):
+  <em>φᵢ(ρ) = (π aᵢ / b<sub>i</sub>) exp(−π²ρ² / b<sub>i</sub>)</em>,
+  where ρ is the 2D radial distance from the atom centre.
+  <strong>Box Grid</strong> sets the canvas pixel resolution (128–512 px); larger grids give sharper images at the cost of compute time.
+  <strong>Box Size</strong> controls the field of view as a multiple of the longest molecular dimension.
+</div>
+
+
+<!-- ── ChimeraX export modal ──────────────────────────────── -->
+<div id="cxc-modal">
+  <div id="cxc-box">
+    <div id="cxc-title">ChimeraX view commands</div>
+    <div id="cxc-sub">Paste into the ChimeraX command line, or save as a .cxc script.</div>
+    <textarea id="cxc-text" spellcheck="false" autocomplete="off"></textarea>
+    <div class="btn-row" style="margin-top:10px;">
+      <button class="mini-btn" id="cxc-copy" onclick="copyChimeraX()">Copy</button>
+      <button class="mini-btn" id="cxc-apply" onclick="applyChimeraX()">Apply to view</button>
+      <button class="mini-btn" onclick="closeChimeraX()" style="color:var(--dim);">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════════════════════════
+const DEFAULT_LOWPASS = 6;    // Å — default low-pass cutoff resolution
+let   lowpassOn    = true; // Fourier low-pass filter applied to the 2D projection
+let   lowpassRes   = DEFAULT_LOWPASS; // Å — cutoff resolution (kc = 1/res)
+const DEFAULT_TAPER = 1.0;  // raised-cosine transition width, as a fraction of kc
+let   lowpassTaper = DEFAULT_TAPER;
+let   PROJ_GRID    = 128;  // projection canvas resolution (pixels); user-adjustable
+let   boxMultiplier = 2.0; // box = longestDim × boxMultiplier; user-adjustable
+let   normMode     = 'p100'; // 'p100' = true maximum (default), 'p99' = 99th-percentile normalisation
+
+// ════════════════════════════════════════════════════════════
+//  ELECTRON SCATTERING FACTORS — Peng et al. 1996
+//
+//  f_e(s) = Σᵢ aᵢ exp(−bᵢ s²)   [s = sinθ/λ in Å⁻¹]
+//
+//  Projected real-space potential (integrate along z analytically):
+//    φ(ρ) = Σᵢ (π aᵢ/bᵢ) exp(−π²ρ²/bᵢ)
+//
+//  Each Gaussian term has:
+//    amplitude  Aᵢ = π aᵢ/bᵢ
+//    inv2sig2ᵢ  = π²/bᵢ   (= 1/(2σᵢ²),  σᵢ = √bᵢ / (π√2))
+//
+//  Source: Peng L-M, Ren G, Dudarev S L & Whelan M J (1996),
+//  Acta Cryst. A52, 257–276, Table 1 — five-Gaussian fits for
+//  neutral atoms, s < 2 Å⁻¹, ALL elements Z = 1–98 (H–Cf).
+//  Identical to International Tables Vol. C (2011), table 4.3.2.2;
+//  values cross-checked against the cctbx and abTEM distributions.
+//  Every element is tabulated — no interpolation, no fallback.
+//  (Note: a few heavy elements, e.g. Rb and Np, have one genuine
+//  negative aᵢ in the published fit.)
+// ════════════════════════════════════════════════════════════
+const PENG = {
+  H:  { a:[0.0349,0.1201,0.1970,0.0573,0.1195], b:[0.5347,3.5867,12.3471,18.9525,38.6269] },  // Z=1
+  HE: { a:[0.0317,0.0838,0.1526,0.1334,0.0164], b:[0.2507,1.4751,4.4938,12.6646,31.1653] },  // Z=2
+  LI: { a:[0.0750,0.2249,0.5548,1.4954,0.9354], b:[0.3864,2.9383,15.3829,53.5545,138.7337] },  // Z=3
+  BE: { a:[0.0780,0.2210,0.6740,1.3867,0.6925], b:[0.3131,2.2381,10.1517,30.9061,78.3273] },  // Z=4
+  B:  { a:[0.0909,0.2551,0.7738,1.2136,0.4606], b:[0.2995,2.1155,8.3816,24.1292,63.1314] },  // Z=5
+  C:  { a:[0.0893,0.2563,0.7570,1.0487,0.3575], b:[0.2465,1.7100,6.4094,18.6113,50.2523] },  // Z=6
+  N:  { a:[0.1022,0.3219,0.7982,0.8197,0.1715], b:[0.2451,1.7481,6.1925,17.3894,48.1431] },  // Z=7
+  O:  { a:[0.0974,0.2921,0.6910,0.6990,0.2039], b:[0.2067,1.3815,4.6943,12.7105,32.4726] },  // Z=8
+  F:  { a:[0.1083,0.3175,0.6487,0.5846,0.1421], b:[0.2057,1.3439,4.2788,11.3932,28.7881] },  // Z=9
+  NE: { a:[0.1269,0.3535,0.5582,0.4674,0.1460], b:[0.2200,1.3779,4.0203,9.4934,23.1278] },  // Z=10
+  NA: { a:[0.2142,0.6853,0.7692,1.6589,1.4482], b:[0.3334,2.3446,10.0830,48.3037,138.2700] },  // Z=11
+  MG: { a:[0.2314,0.6866,0.9677,2.1882,1.1339], b:[0.3278,2.2720,10.9241,39.2898,101.9748] },  // Z=12
+  AL: { a:[0.2390,0.6573,1.2011,2.5586,1.2312], b:[0.3138,2.1063,10.4163,34.4552,98.5344] },  // Z=13
+  SI: { a:[0.2519,0.6372,1.3795,2.5082,1.0500], b:[0.3075,2.0174,9.6746,29.3744,80.4732] },  // Z=14
+  P:  { a:[0.2548,0.6106,1.4541,2.3204,0.8477], b:[0.2908,1.8740,8.5176,24.3434,63.2996] },  // Z=15
+  S:  { a:[0.2497,0.5628,1.3899,2.1865,0.7715], b:[0.2681,1.6711,7.0267,19.5377,50.3888] },  // Z=16
+  CL: { a:[0.2443,0.5397,1.3919,2.0197,0.6621], b:[0.2468,1.5242,6.1537,16.6687,42.3086] },  // Z=17
+  AR: { a:[0.2385,0.5017,1.3428,1.8899,0.6079], b:[0.2289,1.3694,5.2561,14.0928,35.5361] },  // Z=18
+  K:  { a:[0.4115,1.4031,2.2784,2.6742,2.2162], b:[0.3703,3.3874,13.1029,68.9592,194.4329] },  // Z=19
+  CA: { a:[0.4054,1.3880,2.1602,3.7532,2.2063], b:[0.3499,3.0991,11.9608,53.9353,142.3892] },  // Z=20
+  SC: { a:[0.3787,1.2181,2.0594,3.2618,2.3870], b:[0.3133,2.5856,9.5813,41.7688,116.7282] },  // Z=21
+  TI: { a:[0.3825,1.2598,2.0008,3.0617,2.0694], b:[0.3040,2.4863,9.2783,39.0751,109.4583] },  // Z=22
+  V:  { a:[0.3876,1.2750,1.9109,2.8314,1.8979], b:[0.2967,2.3780,8.7981,35.9528,101.7201] },  // Z=23
+  CR: { a:[0.4046,1.3696,1.8941,2.0800,1.2196], b:[0.2986,2.3958,9.1406,37.4701,113.7121] },  // Z=24
+  MN: { a:[0.3796,1.2094,1.7815,2.5420,1.5937], b:[0.2699,2.0455,7.4726,31.0604,91.5622] },  // Z=25
+  FE: { a:[0.3946,1.2725,1.7031,2.3140,1.4795], b:[0.2717,2.0443,7.6007,29.9714,86.2265] },  // Z=26
+  CO: { a:[0.4118,1.3161,1.6493,2.1930,1.2830], b:[0.2742,2.0372,7.7205,29.9680,84.9383] },  // Z=27
+  NI: { a:[0.3860,1.1765,1.5451,2.0730,1.3814], b:[0.2478,1.7660,6.3107,25.2204,74.3146] },  // Z=28
+  CU: { a:[0.4314,1.3208,1.5236,1.4671,0.8562], b:[0.2694,1.9223,7.3474,28.9892,90.6246] },  // Z=29
+  ZN: { a:[0.4288,1.2646,1.4472,1.8294,1.0934], b:[0.2593,1.7998,6.7500,25.5860,73.5284] },  // Z=30
+  GA: { a:[0.4818,1.4032,1.6561,2.4605,1.1054], b:[0.2825,1.9785,8.7546,32.5238,98.5523] },  // Z=31
+  GE: { a:[0.4655,1.3014,1.6088,2.6998,1.3003], b:[0.2647,1.7926,7.6071,26.5541,77.5238] },  // Z=32
+  AS: { a:[0.4517,1.2229,1.5852,2.7958,1.2638], b:[0.2493,1.6436,6.8154,22.3681,62.0390] },  // Z=33
+  SE: { a:[0.4477,1.1678,1.5843,2.8087,1.1956], b:[0.2405,1.5442,6.3231,19.4610,52.0233] },  // Z=34
+  BR: { a:[0.4798,1.1948,1.8695,2.6953,0.8203], b:[0.2504,1.5963,6.9653,19.8492,50.3233] },  // Z=35
+  KR: { a:[0.4546,1.0993,1.7696,2.7068,0.8672], b:[0.2309,1.4279,5.9449,16.6752,42.2243] },  // Z=36
+  RB: { a:[1.0160,2.8528,3.5466,-7.7804,12.1148], b:[0.4853,5.0925,25.7851,130.4515,138.6775] },  // Z=37
+  SR: { a:[0.6703,1.4926,3.3368,4.4600,3.1501], b:[0.3190,2.2287,10.3504,52.3291,151.2216] },  // Z=38
+  Y:  { a:[0.6894,1.5474,3.2450,4.2126,2.9764], b:[0.3189,2.2904,10.0062,44.0771,125.0120] },  // Z=39
+  ZR: { a:[0.6719,1.4684,3.1668,3.9557,2.8920], b:[0.3036,2.1249,8.9236,36.8458,108.2049] },  // Z=40
+  NB: { a:[0.6123,1.2677,3.0348,3.3841,2.3683], b:[0.2709,1.7683,7.2489,27.9465,98.5624] },  // Z=41
+  MO: { a:[0.6773,1.4798,3.1788,3.0824,1.8384], b:[0.2920,2.0606,8.1129,30.5336,100.0658] },  // Z=42
+  TC: { a:[0.7082,1.6392,3.1993,3.4327,1.8711], b:[0.2976,2.2106,8.5246,33.1456,96.6377] },  // Z=43
+  RU: { a:[0.6735,1.4934,3.0966,2.7254,1.5597], b:[0.2773,1.9716,7.3249,26.6891,90.5581] },  // Z=44
+  RH: { a:[0.6413,1.3690,2.9854,2.6952,1.5433], b:[0.2580,1.7721,6.3854,23.2549,85.1517] },  // Z=45
+  PD: { a:[0.5904,1.1775,2.6519,2.2875,0.8689], b:[0.2324,1.5019,5.1591,15.5428,46.8213] },  // Z=46
+  AG: { a:[0.6377,1.3790,2.8294,2.3631,1.4553], b:[0.2466,1.6974,5.7656,20.0943,76.7372] },  // Z=47
+  CD: { a:[0.6364,1.4247,2.7802,2.5973,1.7886], b:[0.2407,1.6823,5.6588,20.7219,69.1109] },  // Z=48
+  IN: { a:[0.6768,1.6589,2.7740,3.1835,2.1326], b:[0.2522,1.8545,6.2936,25.1457,84.5448] },  // Z=49
+  SN: { a:[0.7224,1.9610,2.7161,3.5603,1.8972], b:[0.2651,2.0604,7.3011,27.5493,81.3349] },  // Z=50
+  SB: { a:[0.7106,1.9247,2.6149,3.8322,1.8899], b:[0.2562,1.9646,6.8852,24.7648,68.9168] },  // Z=51
+  TE: { a:[0.6947,1.8690,2.5356,4.0013,1.8955], b:[0.2459,1.8542,6.4411,22.1730,59.2206] },  // Z=52
+  I:  { a:[0.7047,1.9484,2.5940,4.1526,1.5057], b:[0.2455,1.8638,6.7639,21.8007,56.4395] },  // Z=53
+  XE: { a:[0.6737,1.7908,2.4129,4.2100,1.7058], b:[0.2305,1.6890,5.8218,18.3928,47.2496] },  // Z=54
+  CS: { a:[1.2704,3.8018,5.6618,0.9205,4.8105], b:[0.4356,4.2058,23.4342,136.7783,171.7561] },  // Z=55
+  BA: { a:[0.9049,2.6076,4.8498,5.1603,4.7388], b:[0.3066,2.4363,12.1821,54.6135,161.9978] },  // Z=56
+  LA: { a:[0.8405,2.3863,4.6139,5.1514,4.7949], b:[0.2791,2.1410,10.3400,41.9148,132.0204] },  // Z=57
+  CE: { a:[0.8551,2.3915,4.5772,5.0278,4.5118], b:[0.2805,2.1200,10.1808,42.0633,130.9893] },  // Z=58
+  PR: { a:[0.9096,2.5313,4.5266,4.6376,4.3690], b:[0.2939,2.2471,10.8266,48.8842,147.6020] },  // Z=59
+  ND: { a:[0.8807,2.4183,4.4448,4.6858,4.1725], b:[0.2802,2.0836,10.0357,47.4506,146.9976] },  // Z=60
+  PM: { a:[0.9471,2.5463,4.3523,4.4789,3.9080], b:[0.2977,2.2276,10.5762,49.3619,145.3580] },  // Z=61
+  SM: { a:[0.9699,2.5837,4.2778,4.4575,3.5985], b:[0.3003,2.2447,10.6487,50.7994,146.4179] },  // Z=62
+  EU: { a:[0.8694,2.2413,3.9196,3.9694,4.5498], b:[0.2653,1.8590,8.3998,36.7397,125.7089] },  // Z=63
+  GD: { a:[0.9673,2.4702,4.1148,4.4972,3.2099], b:[0.2909,2.1014,9.7067,43.4270,125.9474] },  // Z=64
+  TB: { a:[0.9325,2.3673,3.8791,3.9674,3.7996], b:[0.2761,1.9511,8.9296,41.5937,131.0122] },  // Z=65
+  DY: { a:[0.9505,2.3705,3.8218,4.0471,3.4451], b:[0.2773,1.9469,8.8862,43.0938,133.1396] },  // Z=66
+  HO: { a:[0.9248,2.2428,3.6182,3.7910,3.7912], b:[0.2660,1.8183,7.9655,33.1129,101.8139] },  // Z=67
+  ER: { a:[1.0373,2.4824,3.6558,3.8925,3.0056], b:[0.2944,2.0797,9.4156,45.8056,132.7720] },  // Z=68
+  TM: { a:[1.0075,2.3787,3.5440,3.6932,3.1759], b:[0.2816,1.9486,8.7162,41.8420,125.0320] },  // Z=69
+  YB: { a:[1.0347,2.3911,3.4619,3.6556,3.0052], b:[0.2855,1.9679,8.7619,42.3304,125.6499] },  // Z=70
+  LU: { a:[0.9927,2.2436,3.3554,3.7813,3.0994], b:[0.2701,1.8073,7.8112,34.4849,103.3526] },  // Z=71
+  HF: { a:[1.0295,2.2911,3.4110,3.9497,2.4925], b:[0.2761,1.8625,8.0961,34.2712,98.5295] },  // Z=72
+  TA: { a:[1.0190,2.2291,3.4097,3.9252,2.2679], b:[0.2694,1.7962,7.6944,31.0942,91.1089] },  // Z=73
+  W:  { a:[0.9853,2.1167,3.3570,3.7981,2.2798], b:[0.2569,1.6745,7.0098,26.9234,81.3910] },  // Z=74
+  RE: { a:[0.9914,2.0858,3.4531,3.8812,1.8526], b:[0.2548,1.6518,6.8845,26.7234,81.7215] },  // Z=75
+  OS: { a:[0.9813,2.0322,3.3665,3.6235,1.9741], b:[0.2487,1.5973,6.4737,23.2817,70.9254] },  // Z=76
+  IR: { a:[1.0194,2.0645,3.4425,3.4914,1.6976], b:[0.2554,1.6475,6.5966,23.2269,70.0272] },  // Z=77
+  PT: { a:[0.9148,1.8096,3.2134,3.2953,1.5754], b:[0.2263,1.3813,5.3243,17.5987,60.0171] },  // Z=78
+  AU: { a:[0.9674,1.8916,3.3993,3.0524,1.2607], b:[0.2358,1.4712,5.6758,18.7119,61.5286] },  // Z=79
+  HG: { a:[1.0033,1.9469,3.4396,3.1548,1.4180], b:[0.2413,1.5298,5.8009,19.4520,60.5753] },  // Z=80
+  TL: { a:[1.0689,2.1038,3.6039,3.4927,1.8283], b:[0.2540,1.6715,6.3509,23.1531,78.7099] },  // Z=81
+  PB: { a:[1.0891,2.1867,3.6160,3.8031,1.8994], b:[0.2552,1.7174,6.5131,23.9170,74.7039] },  // Z=82
+  BI: { a:[1.1007,2.2306,3.5689,4.1549,2.0382], b:[0.2546,1.7351,6.4948,23.6464,70.3780] },  // Z=83
+  PO: { a:[1.1568,2.4353,3.6459,4.4064,1.7179], b:[0.2648,1.8786,7.1749,25.1766,69.2821] },  // Z=84
+  AT: { a:[1.0909,2.1976,3.3831,4.6700,2.1277], b:[0.2466,1.6707,6.0197,20.7657,57.2663] },  // Z=85
+  RN: { a:[1.0756,2.1630,3.3178,4.8852,2.0489], b:[0.2402,1.6169,5.7644,19.4568,52.5009] },  // Z=86
+  FR: { a:[1.4282,3.5081,5.6767,4.1964,3.8946], b:[0.3183,2.6889,13.4816,54.3866,200.8321] },  // Z=87
+  RA: { a:[1.3127,3.1243,5.2988,5.3891,5.4133], b:[0.2887,2.2897,10.8276,43.5389,145.6109] },  // Z=88
+  AC: { a:[1.3128,3.1021,5.3385,5.9611,4.7562], b:[0.2861,2.2509,10.5287,41.7796,128.2973] },  // Z=89
+  TH: { a:[1.2553,2.9178,5.0862,6.1206,4.7122], b:[0.2701,2.0636,9.3051,34.5977,107.9200] },  // Z=90
+  PA: { a:[1.3218,3.1444,5.4371,5.6444,4.0107], b:[0.2827,2.2250,10.2454,41.1162,124.4449] },  // Z=91
+  U:  { a:[1.3382,3.2043,5.4558,5.4839,3.6342], b:[0.2838,2.2452,10.2519,41.7251,124.9023] },  // Z=92
+  NP: { a:[1.5193,4.0053,6.5327,-0.1402,6.7489], b:[0.3213,2.8206,14.8878,68.9103,81.7257] },  // Z=93
+  PU: { a:[1.3517,3.2937,5.3213,4.6466,3.5714], b:[0.2813,2.2418,9.9952,42.7939,132.1739] },  // Z=94
+  AM: { a:[1.2135,2.7962,4.7545,4.5731,4.4786], b:[0.2483,1.8437,7.5421,29.3841,112.4579] },  // Z=95
+  CM: { a:[1.2937,3.1100,5.0393,4.7546,3.5031], b:[0.2638,2.0341,8.7101,35.2992,109.4972] },  // Z=96
+  BK: { a:[1.2915,3.1023,4.9309,4.6009,3.4661], b:[0.2611,2.0023,8.4377,34.1559,105.8911] },  // Z=97
+  CF: { a:[1.2089,2.7391,4.3482,4.0047,4.6497], b:[0.2421,1.7487,6.7262,23.2153,80.3108] },  // Z=98
+};
+
+// ── Peng kernel cache ── key: element symbol
+const PENG_KERNEL_CACHE = {};
+
+/**
+ * Compute the projected Peng 1996 scattering kernel.
+ *
+ * Peng parameterises the electron scattering factor as:
+ *   f(s) = Σᵢ aᵢ exp(−bᵢ s²)   [s = sinθ/λ, Å⁻¹]
+ *
+ * The projected real-space amplitude of each term is:
+ *   Aᵢ        = π · aᵢ / bᵢ
+ *   inv2sig2ᵢ = π² / bᵢ
+ *
+ * @param {string} el – element symbol (e.g. "C", "FE")
+ * @returns {{ terms: {A, inv2sig2}[], cutoff2: number }}
+ */
+function getPengKernel(el) {
+  if (PENG_KERNEL_CACHE[el]) return PENG_KERNEL_CACHE[el];
+
+  const p = PENG[el];
+  if (!p) {
+    // The Peng 1996 table covers every element Z = 1–98, so this only
+    // happens for an unparseable element symbol. Contribute nothing
+    // rather than substituting a wrong element.
+    console.warn(`MolProj: unrecognised element symbol "${el}" — atom ignored in projection`);
+    const empty = { terms: [], cutoff2: 0 };
+    PENG_KERNEL_CACHE[el] = empty;
+    return empty;
+  }
+
+  const PI2 = Math.PI * Math.PI;
+  let maxSig2 = 0;
+
+  const terms = p.a.map((ai, i) => {
+    const b_i     = p.b[i];
+    const A       = Math.PI * ai / b_i;
+    const inv2s2  = PI2 / b_i;
+    const sig2    = 0.5 / inv2s2;
+    if (sig2 > maxSig2) maxSig2 = sig2;
+    return { A, inv2sig2: inv2s2 };
+  });
+
+  // Cutoff at ~6.4σ of widest term (conservative; Gaussian has decayed to ~e⁻²⁰ at this radius)
+  const cutoff2 = maxSig2 * 4.5 * 4.5 * 2;
+  const result = { terms, cutoff2 };
+  PENG_KERNEL_CACHE[el] = result;
+  return result;
+}
+
+// ── CPK colors (Three.js hex) — covers proteins, nucleic acids, metals ──
+const CPK = {
+  // Non-metals / organics
+  H:  0xf5f5f5, C:  0x404040, N:  0x3b82f6, O:  0xef4444,
+  S:  0xfacc15, P:  0xf97316, F:  0x22c55e, CL: 0x16a34a,
+  BR: 0x991b1b, I:  0x7c3aed, B:  0xffb580,
+  // Alkali / alkaline earth
+  LI: 0x8b3fcf, NA: 0xfbbf24, K:  0x9333ea,
+  RB: 0x8b0000, CS: 0x6600cc,
+  BE: 0x2f9e44, MG: 0x15803d, CA: 0x94a3b8,
+  SR: 0x00b4d8, BA: 0xf4d03f,
+  // Transition metals
+  SC: 0xe8d5c4, TI: 0x9ca3af, V:  0x9b59b6, CR: 0x27ae60,
+  MN: 0x7e22ce, FE: 0xe07b00, CO: 0x007bff, NI: 0x3cb371,
+  CU: 0xb45309, ZN: 0x818cf8, Y:  0xe8c9a0, ZR: 0x94d2bd,
+  NB: 0x6daedb, MO: 0x54478c, TC: 0x3d5a80, RU: 0x98c1d9,
+  RH: 0xc8e6c9, PD: 0xb2bec3, AG: 0xbdc3c7, CD: 0xffd700,
+  HF: 0x4fc3f7, TA: 0x80cbc4, W:  0x2196f3, RE: 0x80deea,
+  OS: 0x26c6da, IR: 0x00bcd4, PT: 0xe0e0e0, AU: 0xffd700,
+  HG: 0xb0bec5,
+  // Post-transition / metalloids
+  AL: 0xbfa094, SI: 0xb0a090, GE: 0x668f80, AS: 0xbd80e3,
+  SE: 0xffa07a, SN: 0x999999, SB: 0x9e6b50, TE: 0xd47a00,
+  PB: 0x575961, BI: 0x9d4edd,
+  // Rare earths / lanthanides
+  LA: 0x70d6ff, CE: 0xffffc5, EU: 0x61006d, GD: 0x45ffa5,
+  // Actinides
+  U:  0x008fff, TH: 0x00baff,
+  DEFAULT: 0x00ff88
+};
+
+// ── Van der Waals radii (Å) — from Alvarez 2013 / Bondi ──
+const VDW = {
+  H:  0.31, C:  0.77, N:  0.71, O:  0.66, S:  1.05, P:  1.07,
+  F:  0.57, CL: 0.99, BR: 1.14, I:  1.33, B:  0.87,
+  LI: 1.28, NA: 1.66, K:  2.03, RB: 2.16, CS: 2.35,
+  BE: 0.96, MG: 1.41, CA: 1.76, SR: 1.95, BA: 2.15,
+  FE: 1.26, CO: 1.25, NI: 1.24, CU: 1.28, ZN: 1.22,
+  MN: 1.39, CR: 1.39, V:  1.53, TI: 1.60, SC: 1.70,
+  MO: 1.54, W:  1.62, RU: 1.46, PD: 1.40, PT: 1.75,
+  AG: 1.72, AU: 1.66, HG: 1.55, CD: 1.51, PB: 2.02,
+  AL: 1.43, SI: 1.17, GE: 1.22, SE: 1.17, AS: 1.21,
+  U:  1.75, TH: 1.80,
+  DEFAULT: 0.80
+};
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+let scene, camera, renderer, molecule;
+let ambientLight, dirLight, fillLight;
+
+let allAtoms     = [];   // all parsed atoms (centered)
+let visAtoms     = [];   // atoms to show/project (filtered)
+let showHetatm   = true;
+let hiddenChains = new Set();  // chain IDs currently hidden
+// Centroid of the structure as loaded, in the file's own coordinates.
+// centerAtoms() shifts atoms so this lands on the origin (which is where
+// Three.js pivots); ChimeraX applies its matrix to the *original* coords,
+// so the export needs this to rebuild the equivalent transform.
+let origCentroid = { x: 0, y: 0, z: 0 };
+let fullProjBox  = null;       // projection box locked to full structure on load (never shrinks)
+let activeProjBox = null;      // overrides fullProjBox when user explicitly recenters/reboxes
+let sceneOffset  = new THREE.Vector3(0, 0, 0); // centroid of visAtoms subtracted from all mesh positions so rotation pivot = visible centroid
+let cartoonMode  = true;
+let atomSizeMult = 0.40;
+let brightness   = 1.0;
+let ambientStr   = 0.6;
+
+let ssData       = { helices: [], sheets: [] }; // secondary structure from PDB HELIX/SHEET records
+let ssMap        = {};    // geometry-computed SS: "chain:resSeq" → 'H'|'E'|'C'
+let rawPdbText   = '';
+
+let isDragging   = false;
+let prevMouse    = { x:0, y:0 };
+let projNeedsUpdate = false;
+let lastProjTime = 0;
+
+// ── Cached volume for hybrid projection ──────────────────────────
+// The 3D density volume is built once from all atoms at rest pose,
+// then only Z-summed during rotation for fast real-time display.
+let cachedVolume     = null;   // Float32Array [gridVX * gridVY * gridVZ]
+let cachedVolGridW   = 0;      // voxels X
+let cachedVolGridH   = 0;      // voxels Y
+let cachedVolGridD   = 0;      // voxels Z
+let cachedVolDelta   = 1.0;    // Å/voxel
+let cachedVolXmin    = 0;
+let cachedVolYmin    = 0;
+let cachedVolZmin    = 0;
+let volumeDirty      = true;   // rebuild volume when structure changes
+
+let projCanvas, projCtx;
+let gridDelta    = 1.0;
+
+let projXmin, projYmin;  // world coords of grid origin
+
+let fpsFrames = 0, fpsLast = performance.now(), fps = 60;
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+function init() {
+  projCanvas = document.getElementById('proj-canvas');
+  projCtx    = projCanvas.getContext('2d');
+
+  setupThree();
+  setupControls();
+  setupEvents();
+  animate();
+  setStatus('Ready — load a .pdb or .cif file to begin');
+}
+
+// ════════════════════════════════════════════════════════════
+//  THREE.JS SETUP
+// ════════════════════════════════════════════════════════════
+function setupThree() {
+  const panel  = document.getElementById('viewer-panel');
+  const canvas = document.getElementById('three-canvas');
+  const W = panel.clientWidth, H = panel.clientHeight;
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000208);
+  scene.fog = new THREE.FogExp2(0x000208, 0.005);
+
+  camera = new THREE.PerspectiveCamera(40, W/H, 0.1, 2000);
+  camera.position.set(0, 0, 120);
+  camera.lookAt(0, 0, 0);
+
+  // ── Fixed lights — "simple" style: balanced ambient + clear directionals ──
+  ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambientLight);
+
+  dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+  dirLight.position.set(5, 8, 6).normalize().multiplyScalar(50);
+  scene.add(dirLight);
+
+  fillLight = new THREE.DirectionalLight(0xc8d8ff, 0.35);
+  fillLight.position.set(-5, -3, 4).normalize().multiplyScalar(40);
+  scene.add(fillLight);
+
+  // Molecule group — only THIS rotates
+  molecule = new THREE.Group();
+  scene.add(molecule);
+
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(W, H);
+}
+
+// ════════════════════════════════════════════════════════════
+//  ELEMENT RESOLUTION
+//  Priority: columns 77-78 → residue-context lookup → atom-name heuristic
+// ════════════════════════════════════════════════════════════
+
+// Standard amino acid residues and their atom → element mapping
+// Only entries where the name is ambiguous need to be explicit.
+// CA = alpha-carbon in amino acids, but calcium in HETATM/ION context.
+const AMINO_ACIDS = new Set([
+  'ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE',
+  'LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL',
+  // common modified
+  'MSE','SEC','PYL','CSE','HYP','SEP','TPO','PTR'
+]);
+
+const NUCLEIC_RESIDUES = new Set([
+  'DA','DC','DG','DT','DU',   // DNA
+  'A','C','G','U','T',         // RNA (single-letter)
+  'ADE','CYT','GUA','URA','THY' // full names
+]);
+
+// Elements that can appear as HETATM ion records
+const ION_RESIDUES = new Set([
+  'CA','MG','ZN','FE','MN','CU','CO','NI','NA','K','LI',
+  'SR','BA','CS','RB','CD','HG','PB','PT','AU','AG',
+  'AL','CR','V','MO','W','SE','AS','BR','CL','IOD',
+  'FE2','FE3','FES','SF4','F3S'
+]);
+
+/**
+ * Resolve element symbol from a parsed PDB line.
+ * @param {string} elemCol  - raw content of columns 77-78 (may be blank)
+ * @param {string} atomName - columns 13-16, trimmed
+ * @param {boolean} isHetatm
+ * @param {string} resName  - columns 18-20, trimmed
+ * @returns {string} uppercase element symbol, e.g. "C", "CA", "ZN"
+ */
+function resolveElement(elemCol, atomName, isHetatm, resName) {
+  // ── 1. Trust the explicit element column when present ───────────
+  // mmCIF type_symbol and PDB columns 77-78 are always authoritative.
+  const fromCol = elemCol.trim().toUpperCase();
+  if (fromCol && /^[A-Z]{1,2}$/.test(fromCol) && fromCol !== '?') return fromCol;
+
+  const name = atomName.toUpperCase().trim();
+  const res  = resName.toUpperCase().trim();
+
+  // ── 2. Known single-atom HETATM residues (ion records) ─────────
+  if (isHetatm) {
+    // Multi-char residue names that ARE the element
+    const ionMap = {
+      'ZN':'ZN','ZN2':'ZN','MG':'MG','CA':'CA','FE':'FE','FE2':'FE','FE3':'FE',
+      'MN':'MN','CU':'CU','CU1':'CU','CU2':'CU','CO':'CO','NI':'NI','NA':'NA',
+      'K':'K','LI':'LI','RB':'RB','CS':'CS','SR':'SR','BA':'BA',
+      'IOD':'I','BR':'BR','CL':'CL','F':'F',
+      'ZR':'ZR','MO':'MO','AG':'AG','CD':'CD','IN':'IN','SN':'SN',
+      'SB':'SB','TE':'TE','LA':'LA','CE':'CE','GD':'GD','YB':'YB',
+      'W':'W','OS':'OS','IR':'IR','PT':'PT','AU':'AU','HG':'HG',
+      'TL':'TL','PB':'PB','BI':'BI','U':'U',
+    };
+    if (ionMap[res]) return ionMap[res];
+    // HOH / water always oxygen
+    if (res === 'HOH' || res === 'WAT' || res === 'H2O' || res === 'DOD') return 'O';
+  }
+
+  // ── 3. Standard amino acid backbone: C-alpha/C-beta are always C ─
+  if (!isHetatm && AMINO_ACIDS.has(res)) {
+    const backbone = { N:'N', C:'C', O:'O', S:'S', SE:'SE',
+      CA:'C', CB:'C', CG:'C', CG1:'C', CG2:'C', CD:'C', CD1:'C', CD2:'C',
+      CE:'C', CE1:'C', CE2:'C', CE3:'C', CZ:'C', CZ2:'C', CZ3:'C', CH2:'C',
+      OG:'O', OG1:'O', OD1:'O', OD2:'O', OE1:'O', OE2:'O', OH:'O',
+      NZ:'N', NH1:'N', NH2:'N', ND1:'N', ND2:'N', NE:'N', NE1:'N', NE2:'N',
+      SD:'S', SG:'S',
+    };
+    if (backbone[name]) return backbone[name];
+    if (name === 'OXT' || name.startsWith('OT')) return 'O';
+  }
+
+  // ── 4. Nucleic acid backbone ────────────────────────────────────
+  if (!isHetatm && NUCLEIC_RESIDUES.has(res)) {
+    if (/^C/.test(name)) return 'C';
+    if (/^O/.test(name)) return 'O';
+    if (/^N/.test(name)) return 'N';
+    if (/^P/.test(name)) return 'P';
+  }
+
+  // ── 5. General heuristic: PDB atom naming conventions ───────────
+  // PDB format: cols 13-16, right-justified for 2-char elements (e.g. "FE" in 13-14),
+  // left-justified for 1-char (e.g. " CA" for alpha-carbon).
+  // Strip trailing digits/primes and try 2-char match first.
+  const stripped = name.replace(/[0-9'"*+\-]+$/, '').replace(/^[0-9]/, '');
+
+  // Try 2-char element first (needed for FE, ZN, MG, etc. in HETATM)
+  if (stripped.length >= 2) {
+    const two = stripped.substring(0, 2);
+    if (PENG[two] || CPK[two] !== undefined) return two;
+  }
+  // 1-char fallback
+  const one = stripped[0];
+  if (one && /^[A-Z]$/.test(one)) return one;
+  return 'C';
+}
+function loadFile(file) {
+  const name = file.name.toLowerCase();
+  const isCif = name.endsWith('.cif') || name.endsWith('.mmcif');
+  const isPdb = name.endsWith('.pdb');
+  if (!isCif && !isPdb) {
+    setStatus('⚠ Please upload a .pdb or .cif file'); return;
+  }
+  setStatus(`Loading ${file.name}…`);
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      rawPdbText = e.target.result;
+      if (isCif) {
+        const parsed = parseCIF(rawPdbText);
+        ssData   = parsed.ss;
+        allAtoms = parsed.atoms;
+      } else {
+        ssData   = parseSS(rawPdbText);
+        allAtoms = parsePDB(rawPdbText);
+      }
+      if (allAtoms.length === 0) { setStatus('⚠ No atoms found'); return; }
+      origCentroid = { x: 0, y: 0, z: 0 };
+      centerAtoms(allAtoms);
+      buildSSMap(allAtoms, ssData);   // geometry-based SS + record override
+      centerAtoms(allAtoms);
+      fullProjBox = computeProjBoxFrom(allAtoms); // lock box to full structure
+      activeProjBox = null;                        // clear any user override
+      buildChainPanel();              // populate chain visibility input
+      buildScene(true);   // reset orientation on fresh load
+      updateStats();
+      computeProjection();
+      document.getElementById('drop-zone').classList.add('hidden');
+      document.getElementById('status-dot').classList.add('active');
+      setStatus(`✓ Loaded ${file.name} · ${allAtoms.length.toLocaleString()} atoms`);
+    } catch(err) {
+      setStatus('⚠ Parse error: ' + err.message);
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ════════════════════════════════════════════════════════════
+//  mmCIF PARSER
+//  Handles _atom_site, _struct_conf (helices), _struct_sheet_range (sheets)
+// ════════════════════════════════════════════════════════════
+function parseCIF(text) {
+  // Tokenise the CIF into a flat list, tracking loop_ blocks
+  // Strategy: find each loop_ block, read its column headers, then rows.
+
+  const atoms   = [];
+  const helices = [];
+  const sheets  = [];
+
+  // Strip CIF comment lines (lines starting with #) before tokenizing.
+  // This prevents # tokens from bleeding into data row parsing.
+  function tokenize(src) {
+    const toks = [];
+    // Remove comment lines (# at start of line, possibly with leading whitespace)
+    const stripped = src.replace(/^[ \t]*#[^\n]*/mg, '');
+    const re = /;[\s\S]*?;|'[^']*'|"[^"]*"|\S+/g;
+    let m;
+    while ((m = re.exec(stripped)) !== null) {
+      let t = m[0];
+      if (t.startsWith(';')) t = t.slice(1, -1).trim();
+      else if ((t.startsWith("'") && t.endsWith("'")) ||
+               (t.startsWith('"') && t.endsWith('"'))) t = t.slice(1,-1);
+      toks.push(t);
+    }
+    return toks;
+  }
+
+  const toks = tokenize(text);
+  let i = 0;
+
+  while (i < toks.length) {
+    if (toks[i].toLowerCase() === 'loop_') {
+      i++;
+      // Collect column names
+      const cols = [];
+      while (i < toks.length && toks[i].startsWith('_')) {
+        cols.push(toks[i].toLowerCase());
+        i++;
+      }
+      // Determine which loop this is by its columns
+      const isAtom  = cols.some(c => c.startsWith('_atom_site.'));
+      const isConf  = cols.some(c => c.startsWith('_struct_conf.'));
+      const isSheet = cols.some(c => c.startsWith('_struct_sheet_range.'));
+
+      // Read rows until next keyword
+      while (i < toks.length && !toks[i].startsWith('_') &&
+             toks[i].toLowerCase() !== 'loop_' && !toks[i].startsWith('data_') &&
+             toks[i] !== '#') {
+        const row = {};
+        for (let ci = 0; ci < cols.length; ci++, i++) {
+          if (i >= toks.length) break;
+          row[cols[ci]] = toks[i];
+        }
+
+        if (isAtom) {
+          const grp   = row['_atom_site.group_pdb'] || 'ATOM';
+          const isHet = grp.trim().toUpperCase() === 'HETATM';
+          const x = parseFloat(row['_atom_site.cartn_x']);
+          const y = parseFloat(row['_atom_site.cartn_y']);
+          const z = parseFloat(row['_atom_site.cartn_z']);
+          if (isNaN(x)||isNaN(y)||isNaN(z)) continue;
+
+          // Use auth fields if present, fall back to label fields
+          const chain   = (row['_atom_site.auth_asym_id'] || row['_atom_site.label_asym_id'] || 'A').trim();
+          const resSeq  = parseInt(row['_atom_site.auth_seq_id'] || row['_atom_site.label_seq_id']) || 0;
+          const atomName= (row['_atom_site.label_atom_id'] || '').trim();
+          const resName = (row['_atom_site.label_comp_id'] || '').trim();
+          let   el      = (row['_atom_site.type_symbol'] || '').trim().toUpperCase();
+          if (!el) el = resolveElement('', atomName, isHet, resName);
+
+          // Skip alternate conformations (keep only first: '.' or 'A')
+          const altLoc = (row['_atom_site.label_alt_id'] || '.').trim();
+          if (altLoc !== '.' && altLoc !== 'A' && altLoc !== '') continue;
+
+          atoms.push({ x, y, z, el, isHetatm: isHet, atomName, resName,
+                       chain: chain || 'A', resSeq });
+        }
+
+        if (isConf) {
+          // HELX_P = alpha helix; other HELX_ = various helix types
+          const type = (row['_struct_conf.conf_type_id'] || '').toUpperCase();
+          if (type.startsWith('HELX')) {
+            helices.push({
+              chain: (row['_struct_conf.beg_label_asym_id'] || row['_struct_conf.end_label_asym_id'] || 'A').trim(),
+              start: parseInt(row['_struct_conf.beg_label_seq_id']),
+              end:   parseInt(row['_struct_conf.end_label_seq_id'])
+            });
+          }
+        }
+
+        if (isSheet) {
+          sheets.push({
+            chain: (row['_struct_sheet_range.beg_label_asym_id'] || 'A').trim(),
+            start: parseInt(row['_struct_sheet_range.beg_label_seq_id']),
+            end:   parseInt(row['_struct_sheet_range.end_label_seq_id'])
+          });
+        }
+      }
+    } else {
+      i++;
+    }
+  }
+
+  return { atoms, ss: { helices, sheets } };
+}
+
+// ════════════════════════════════════════════════════════════
+//  SECONDARY STRUCTURE — two-tier approach
+//
+//  Tier 1 (preferred): geometry-based DSSP-like assignment
+//    from Cα and backbone N/CA/C atoms — works on any file.
+//  Tier 2 (override): HELIX/SHEET records or mmCIF tables
+//    when present, merged on top of geometry assignment.
+// ════════════════════════════════════════════════════════════
+
+// ssMap: "chain:resSeq" → 'H' | 'E' | 'C'  (computed after atoms load)
+function buildSSMap(atoms, recordSS) {
+  ssMap = {};
+
+  // Collect backbone atoms per residue
+  const residues = {};
+  for (const a of atoms) {
+    if (a.isHetatm || !AMINO_ACIDS.has(a.resName.toUpperCase())) continue;
+    const key = `${a.chain}:${a.resSeq}`;
+    if (!residues[key]) residues[key] = { chain: a.chain, resSeq: a.resSeq };
+    const r = residues[key];
+    if      (a.atomName === 'CA') r.ca = a;
+    else if (a.atomName === 'N')  r.n  = a;
+    else if (a.atomName === 'C')  r.c  = a;
+    else if (a.atomName === 'O')  r.o  = a;
+  }
+
+  const byChain = {};
+  for (const res of Object.values(residues)) {
+    if (!res.ca) continue;
+    (byChain[res.chain] = byChain[res.chain] || []).push(res);
+  }
+  for (const ch of Object.keys(byChain))
+    byChain[ch].sort((a, b) => a.resSeq - b.resSeq);
+
+  const dist = (a, b) => Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2+(a.z-b.z)**2);
+
+  // ── Proper ksdssp H-position (matches ChimeraX/ksdssp exactly) ────
+  // H placed 1.01 A from N along bisector of:
+  //   v1 = -(bisector of C_prev-N-CA angle)
+  //   v2 = -(C_prev->O_prev direction)  = normalize(O_prev - C_prev) negated
+  function vnorm(v) {
+    const l = Math.sqrt(v.x*v.x+v.y*v.y+v.z*v.z) || 1;
+    return { x:v.x/l, y:v.y/l, z:v.z/l };
+  }
+  function vadd(a,b) { return {x:a.x+b.x, y:a.y+b.y, z:a.z+b.z}; }
+  function vsub(a,b) { return {x:a.x-b.x, y:a.y-b.y, z:a.z-b.z}; }
+
+  for (const chain of Object.values(byChain)) {
+    for (let i = 1; i < chain.length; i++) {
+      const r = chain[i], rp = chain[i-1];
+      if (r.resSeq - rp.resSeq > 2) continue;
+      if (!r.n || !r.ca || !rp.c) continue;
+      const v_cn  = vnorm(vsub(rp.c, r.n));
+      const v_can = vnorm(vsub(r.ca, r.n));
+      const v1 = vnorm({x:-(v_cn.x+v_can.x), y:-(v_cn.y+v_can.y), z:-(v_cn.z+v_can.z)});
+      const v2 = rp.o ? vnorm(vsub(rp.c, rp.o)) : v1;
+      const hd = vnorm(vadd(v1, v2));
+      r.h = { x: r.n.x+hd.x*1.01, y: r.n.y+hd.y*1.01, z: r.n.z+hd.z*1.01 };
+    }
+  }
+
+  // ── H-bond energy (Kabsch & Sander 1983, threshold -0.5 kcal/mol) ─
+  function hbE(oi, ci, nj, hj) {
+    if (!oi||!ci||!nj||!hj) return 0;
+    const rON=dist(oi,nj), rCH=dist(ci,hj), rOH=dist(oi,hj), rCN=dist(ci,nj);
+    if (rON<0.5||rCH<0.5||rOH<0.5||rCN<0.5) return 0;
+    return 27.888*(1/rON+1/rCH-1/rOH-1/rCN);
+  }
+
+  // Flat residue list + compact H-bond bitfield hb[i*M+j]
+  const allRes = [];
+  for (const chain of Object.values(byChain)) for (const r of chain) allRes.push(r);
+  const M = allRes.length;
+  const hb = new Uint8Array(M * M);
+  for (let i = 0; i < M; i++) {
+    const ri = allRes[i];
+    if (!ri.o || !ri.c) continue;
+    for (let j = 0; j < M; j++) {
+      if (Math.abs(i-j) < 2) continue;
+      const rj = allRes[j];
+      if (!rj.n || !rj.h) continue;
+      if (dist(ri.o, rj.n) > 10) continue;
+      if (hbE(ri.o, ri.c, rj.n, rj.h) < -0.5) hb[i*M+j] = 1;
+    }
+  }
+  const bon = (i,j) => i>=0&&j>=0&&i<M&&j<M && hb[i*M+j]===1;
+
+  // ── Beta bridges: Kabsch & Sander Table 2 ─────────────────────────
+  // Antiparallel: [bon(i,j)&bon(j,i)] OR [bon(i-1,j+1)&bon(j-1,i+1)]
+  // Parallel:     [bon(i-1,j)&bon(j,i+1)] OR [bon(j-1,i)&bon(i,j+1)]
+  const strandIdx = new Set();
+  for (let i = 1; i < M-1; i++) {
+    for (let j = i+3; j < M-1; j++) {
+      if (allRes[i].chain !== allRes[j].chain) continue;
+      const anti = (bon(i,j)&&bon(j,i)) || (bon(i-1,j+1)&&bon(j-1,i+1));
+      const para = (bon(i-1,j)&&bon(j,i+1)) || (bon(j-1,i)&&bon(i,j+1));
+      if (anti||para) { strandIdx.add(i); strandIdx.add(j); }
+    }
+  }
+
+  // ── Helices: consecutive i->i+4 (alpha) or i->i+3 (3-10) turns ───
+  const turn4 = new Uint8Array(M), turn3 = new Uint8Array(M);
+  for (let i = 0; i < M-4; i++) if (bon(i,i+4)) turn4[i]=1;
+  for (let i = 0; i < M-3; i++) if (bon(i,i+3)) turn3[i]=1;
+  const helixIdx = new Set();
+  for (let i = 0; i < M-5; i++)
+    if (turn4[i]&&turn4[i+1]) for (let k=i+1;k<=i+4;k++) helixIdx.add(k);
+  for (let i = 0; i < M-4; i++)
+    if (turn3[i]&&turn3[i+1]) for (let k=i+1;k<=i+3;k++) helixIdx.add(k);
+
+  // Strand beats helix
+  for (const k of strandIdx) helixIdx.delete(k);
+
+  // ── Assign ssMap (min run 3 residues, matching ChimeraX default) ──
+  for (const chain of Object.values(byChain)) {
+    const N = chain.length;
+    // find base offset of this chain in allRes
+    let base = 0;
+    while (base < M && allRes[base] !== chain[0]) base++;
+
+    const hFlag = chain.map((_,ci) => helixIdx.has(base+ci) ? 1 : 0);
+    for (let i=0;i<N;) {
+      if (hFlag[i]) {
+        let j=i; while(j<N&&hFlag[j]) j++;
+        if (j-i>=3) for(let k=i;k<j;k++) ssMap[`${chain[k].chain}:${chain[k].resSeq}`]='H';
+        i=j;
+      } else i++;
+    }
+    const eFlag = chain.map((_,ci)=>{
+      const key=`${chain[ci].chain}:${chain[ci].resSeq}`;
+      return (strandIdx.has(base+ci)&&ssMap[key]!=='H')?1:0;
+    });
+    for (let i=0;i<N;) {
+      if (eFlag[i]) {
+        let j=i; while(j<N&&eFlag[j]) j++;
+        if (j-i>=3) for(let k=i;k<j;k++) ssMap[`${chain[k].chain}:${chain[k].resSeq}`]='E';
+        i=j;
+      } else i++;
+    }
+  }
+
+  // ── Explicit record override ───────────────────────────────────────
+  const normC = c => (c&&c!=='.')?c:'A';
+  for (const h of recordSS.helices) {
+    if (isNaN(h.start)||isNaN(h.end)) continue;
+    for (const res of Object.values(residues))
+      if (normC(res.chain)===normC(h.chain)&&res.resSeq>=h.start&&res.resSeq<=h.end)
+        ssMap[`${res.chain}:${res.resSeq}`]='H';
+  }
+  for (const s of recordSS.sheets) {
+    if (isNaN(s.start)||isNaN(s.end)) continue;
+    for (const res of Object.values(residues))
+      if (normC(res.chain)===normC(s.chain)&&res.resSeq>=s.start&&res.resSeq<=s.end)
+        ssMap[`${res.chain}:${res.resSeq}`]='E';
+  }
+}
+function getSSType(chain, resSeq) {
+  return ssMap[`${chain}:${resSeq}`] || 'C';
+}
+
+function parseSS(text) {
+  // Parse PDB HELIX/SHEET records — offsets verified against real 1CRN PDB.
+  const helices = [], sheets = [];
+  for (const line of text.split('\n')) {
+    const rec = line.substring(0, 6).trimEnd();
+    if (rec === 'HELIX') {
+      const chain = line.substring(19, 20).trim();
+      const start = parseInt(line.substring(21, 25));
+      const end   = parseInt(line.substring(33, 37));
+      if (!isNaN(start) && !isNaN(end)) helices.push({ chain, start, end });
+    } else if (rec === 'SHEET') {
+      const chain = line.substring(22, 23).trim();
+      const start = parseInt(line.substring(23, 27));
+      const end   = parseInt(line.substring(34, 38));
+      if (!isNaN(start) && !isNaN(end)) sheets.push({ chain, start, end });
+    }
+  }
+  return { helices, sheets };
+}
+
+// ════════════════════════════════════════════════════════════
+//  PDB LOADING & PARSING
+// ════════════════════════════════════════════════════════════
+function parsePDB(text) {
+  const atoms = [];
+  for (const line of text.split('\n')) {
+    const rec = line.substring(0, 6).trimEnd();
+    const isAtom   = rec === 'ATOM';
+    const isHetatm = rec === 'HETATM';
+    if (!isAtom && !isHetatm) continue;
+    const x = parseFloat(line.substring(30,38));
+    const y = parseFloat(line.substring(38,46));
+    const z = parseFloat(line.substring(46,54));
+    if (isNaN(x)||isNaN(y)||isNaN(z)) continue;
+    const elemCol  = line.length > 76 ? line.substring(76,78) : '';
+    const atomName = line.substring(12,16).trim();
+    const resName  = line.substring(17,20).trim();
+    const resSeq   = parseInt(line.substring(22,26)) || 0;
+    const chain    = line.substring(21,22).trim() || 'A';
+    const el = resolveElement(elemCol, atomName, isHetatm, resName);
+    atoms.push({ x, y, z, el, isHetatm, atomName, resName, chain, resSeq });
+  }
+  return atoms;
+}
+
+function centerAtoms(atoms) {
+  let cx=0,cy=0,cz=0;
+  for (const a of atoms) { cx+=a.x; cy+=a.y; cz+=a.z; }
+  cx/=atoms.length; cy/=atoms.length; cz/=atoms.length;
+  for (const a of atoms) { a.x-=cx; a.y-=cy; a.z-=cz; }
+  // Accumulate — this is called more than once per load, and the total
+  // shift is what maps file coordinates onto the viewer's origin.
+  origCentroid.x += cx; origCentroid.y += cy; origCentroid.z += cz;
+}
+
+// ════════════════════════════════════════════════════════════
+//  BUILD 3-D SCENE
+// ════════════════════════════════════════════════════════════
+function buildScene(resetOrientation = false) {
+  while (molecule.children.length) molecule.remove(molecule.children[0]);
+  if (resetOrientation) molecule.quaternion.identity();
+
+  // Hide water for large structures (>20 000 atoms) to keep the scene light.
+  const isLarge = allAtoms.length > 20000;
+  visAtoms = allAtoms.filter(a => {
+    if (!showHetatm && a.isHetatm) return false;
+    if (hiddenChains.has(a.chain)) return false;
+    if (isLarge && a.isHetatm && (a.resName === 'HOH' || a.resName === 'WAT' || a.resName === 'H2O')) return false;
+    return true;
+  });
+
+  let xmx=-Infinity,xmn=Infinity,ymx=-Infinity,ymn=Infinity,zmx=-Infinity,zmn=Infinity;
+  for (const a of visAtoms) {
+    xmx=Math.max(xmx,a.x); xmn=Math.min(xmn,a.x);
+    ymx=Math.max(ymx,a.y); ymn=Math.min(ymn,a.y);
+    zmx=Math.max(zmx,a.z); zmn=Math.min(zmn,a.z);
+  }
+  const maxDim = Math.max(xmx-xmn, ymx-ymn, zmx-zmn);
+  camera.position.z = maxDim * 0.9 + 30;
+  camera.far = camera.position.z * 5;
+  camera.updateProjectionMatrix();
+
+  // Compute sceneOffset = centroid of visAtoms in atom-space coordinates.
+  // All mesh positions inside the molecule group are offset by -sceneOffset so
+  // the visible centroid lands at the group's local origin (0,0,0), which is
+  // exactly where Three.js pivots rotation. molecule.position stays (0,0,0).
+  molecule.position.set(0, 0, 0);
+  if (visAtoms.length > 0) {
+    let cx=0, cy=0, cz=0;
+    for (const a of visAtoms) { cx+=a.x; cy+=a.y; cz+=a.z; }
+    sceneOffset.set(cx/visAtoms.length, cy/visAtoms.length, cz/visAtoms.length);
+  } else {
+    sceneOffset.set(0, 0, 0);
+  }
+  if (cartoonMode) buildCartoon();
+  else             buildBalls(visAtoms);
+
+  volumeDirty = true;   // structure changed — rebuild 3D volume before next projection
+  projNeedsUpdate = true;
+}
+
+function buildBalls(atoms) {
+  const geo = new THREE.SphereGeometry(1, 12, 8);
+  const byEl = {};
+  for (const a of atoms) { if (!byEl[a.el]) byEl[a.el]=[]; byEl[a.el].push(a); }
+  const dummy = new THREE.Object3D();
+  for (const [el, list] of Object.entries(byEl)) {
+    const color  = CPK[el] !== undefined ? CPK[el] : CPK.DEFAULT;
+    const radius = (VDW[el] !== undefined ? VDW[el] : VDW.DEFAULT) * atomSizeMult;
+    const mat = new THREE.MeshPhongMaterial({ color, shininess:100, specular:new THREE.Color(0.35,0.35,0.35) });
+    if (list.length === 1) {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(list[0].x - sceneOffset.x, list[0].y - sceneOffset.y, list[0].z - sceneOffset.z);
+      m.scale.setScalar(radius); molecule.add(m);
+    } else {
+      const im = new THREE.InstancedMesh(geo, mat, list.length);
+      im.frustumCulled = false;
+      for (let i=0; i<list.length; i++) {
+        dummy.position.set(list[i].x - sceneOffset.x, list[i].y - sceneOffset.y, list[i].z - sceneOffset.z);
+        dummy.scale.setScalar(radius); dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+      }
+      im.instanceMatrix.needsUpdate = true; molecule.add(im);
+    }
+  }
+}
+
+const COVALENT_R = {
+  H:0.31,C:0.76,N:0.71,O:0.66,S:1.05,P:1.07,F:0.57,CL:0.99,BR:1.14,I:1.33,
+  FE:1.32,CA:1.76,MG:1.41,ZN:1.22,CU:1.32,MN:1.39,CO:1.26,NI:1.24,
+  NA:1.66,K:2.03,AL:1.21,SI:1.11,SE:1.20,AS:1.21,DEFAULT:0.77
+};
+function covR(el) { return COVALENT_R[el] ?? COVALENT_R.DEFAULT; }
+
+function buildSticks(atoms) {
+  if (!atoms.length) return;
+  const STICK_R=0.18, BALL_R=0.28, BOND_TOL=1.25;
+  const sphGeo=new THREE.SphereGeometry(1,8,6);
+  const cylGeo=new THREE.CylinderGeometry(1,1,1,8,1);
+  const matCache={};
+  const getMat=el=>{ if(!matCache[el]) matCache[el]=new THREE.MeshPhongMaterial({color:CPK[el]??CPK.DEFAULT,shininess:80}); return matCache[el]; };
+  for (const a of atoms) {
+    const m=new THREE.Mesh(sphGeo,getMat(a.el));
+    m.position.set(a.x-sceneOffset.x, a.y-sceneOffset.y, a.z-sceneOffset.z); m.scale.setScalar(BALL_R); molecule.add(m);
+  }
+  for (let i=0; i<atoms.length; i++) {
+    const a=atoms[i];
+    for (let j=i+1; j<atoms.length; j++) {
+      const b=atoms[j];
+      const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z;
+      const dist=Math.sqrt(dx*dx+dy*dy+dz*dz);
+      if (dist<0.4||dist>(covR(a.el)+covR(b.el))*BOND_TOL) continue;
+      const ax=a.x-sceneOffset.x, ay=a.y-sceneOffset.y, az=a.z-sceneOffset.z;
+      const bx=b.x-sceneOffset.x, by=b.y-sceneOffset.y, bz=b.z-sceneOffset.z;
+      const mid=new THREE.Vector3((ax+bx)/2,(ay+by)/2,(az+bz)/2);
+      const dir=new THREE.Vector3(dx,dy,dz).normalize();
+      const quat=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+      for (const [from,to,mat] of [
+        [new THREE.Vector3(ax,ay,az),mid,getMat(a.el)],
+        [mid,new THREE.Vector3(bx,by,bz),getMat(b.el)]
+      ]) {
+        const halfLen=from.distanceTo(to);
+        const center=from.clone().add(to).multiplyScalar(0.5);
+        const m2=new THREE.Mesh(cylGeo,mat);
+        m2.position.copy(center); m2.quaternion.copy(quat);
+        m2.scale.set(STICK_R,halfLen,STICK_R); molecule.add(m2);
+      }
+    }
+  }
+}
+
+// Unified per-chain ribbon: one CatmullRom spline per chain.
+const RIBBON_THICKNESS = 0.30;
+const HELIX_WIDTH      = 2.00;
+const SHEET_WIDTH      = 1.80;
+const SHEET_ARROW_W    = 3.20;
+const COIL_RADIUS      = 0.25;
+const SPLINE_DIV       = 8;
+const N_PROF           = 8;
+
+const CARTOON_COLORS = {
+  H: 0x7ec8be,   // uniform protein color (soft teal-sage) — same for all SS types
+  E: 0x7ec8be,
+  C: 0x7ec8be,
+};
+
+// ── Chain breaks ────────────────────────────────────────────────
+// A trans peptide puts consecutive CAs 3.80 Å apart (cis-proline ~2.9 Å),
+// so anything beyond ~4.5 Å means residues are missing from the model.
+// Detection is by distance rather than by residue numbering: numbering
+// gaps are often just the authors' renumbering, while geometry can't lie.
+// One missing residue already separates the flanking CAs by ~6 Å.
+const CA_BREAK_DIST = 4.5;
+const NA_BREAK_DIST = 9.0;   // consecutive P–P is 5.9 Å (A-form) to 7.0 Å (B-form)
+
+const GAP_DASH_LEN    = 1.2;
+const GAP_DASH_GAP    = 0.9;
+const GAP_DASH_RADIUS = 0.16;   // deliberately thinner than COIL_RADIUS
+let   _dashCylGeo     = null;
+
+function splitAtChainBreaks(atoms, maxDist) {
+  if (!atoms.length) return [];
+  const segs = [[atoms[0]]];
+  for (let i = 1; i < atoms.length; i++) {
+    const a = atoms[i-1], b = atoms[i];
+    const d = Math.hypot(b.x-a.x, b.y-a.y, b.z-a.z);
+    if (d > maxDist) segs.push([b]);
+    else segs[segs.length-1].push(b);
+  }
+  return segs;
+}
+
+// Straight dashed connector marking unmodelled residues. Drawn as small
+// cylinders rather than a THREE.Line so it is lit and depth-shaded like the
+// rest of the cartoon — line widths above 1px are ignored on most platforms.
+function addDashedGap(p0, p1, color) {
+  const dir = p1.clone().sub(p0);
+  const len = dir.length();
+  if (len < 1e-3) return;
+  dir.normalize();
+
+  // Fit a whole number of dashes so both ends land flush on the ribbon
+  // instead of trailing off mid-gap.
+  const n = Math.max(1, Math.round((len + GAP_DASH_GAP) / (GAP_DASH_LEN + GAP_DASH_GAP)));
+  const dashLen = Math.min(GAP_DASH_LEN, (len - (n - 1) * GAP_DASH_GAP) / n);
+  if (dashLen <= 0.01) return;
+  const gap = n > 1 ? (len - n * dashLen) / (n - 1) : 0;
+
+  if (!_dashCylGeo) _dashCylGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1);
+  const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  const mat  = new THREE.MeshPhongMaterial({ color, shininess: 40 });
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(_dashCylGeo, mat);
+    m.position.copy(p0).addScaledVector(dir, i * (dashLen + gap) + dashLen / 2);
+    m.quaternion.copy(quat);
+    m.scale.set(GAP_DASH_RADIUS, dashLen, GAP_DASH_RADIUS);
+    molecule.add(m);
+  }
+}
+
+function buildCartoon() {
+  const oMap = {};
+  for (const a of allAtoms)
+    if (!a.isHetatm && a.atomName === 'O')
+      oMap[`${a.chain}:${a.resSeq}`] = a;
+
+  const byChain = {};
+  for (const a of allAtoms) {
+    if (a.isHetatm || a.atomName !== 'CA') continue;
+    if (!AMINO_ACIDS.has(a.resName.toUpperCase())) continue;
+    if (hiddenChains.has(a.chain)) continue;
+    (byChain[a.chain] = byChain[a.chain] || []).push(a);
+  }
+
+  for (const wholeChain of Object.values(byChain)) {
+    wholeChain.sort((a, b) => a.resSeq - b.resSeq);
+    const segments = splitAtChainBreaks(wholeChain, CA_BREAK_DIST);
+
+    // Dashed connector across each break, drawn before the ribbons so the
+    // solid geometry wins any z-fighting at the junctions.
+    const toScene = a => new THREE.Vector3(a.x - sceneOffset.x, a.y - sceneOffset.y, a.z - sceneOffset.z);
+    for (let s = 1; s < segments.length; s++) {
+      const prev = segments[s-1], next = segments[s];
+      addDashedGap(toScene(prev[prev.length-1]), toScene(next[0]), CARTOON_COLORS.C);
+    }
+
+    for (const chainAtoms of segments) {
+    const NR = chainAtoms.length;
+    if (NR < 2) continue;
+
+    const ssTypes = chainAtoms.map(r => getSSType(r.chain, r.resSeq));
+
+    let guides = chainAtoms.map(r => {
+      const o = oMap[`${r.chain}:${r.resSeq}`];
+      if (o) return new THREE.Vector3(o.x-r.x, o.y-r.y, o.z-r.z).normalize();
+      return new THREE.Vector3(0, 1, 0);
+    });
+    // Sign-correct so no guide flips direction vs its neighbour
+    for (let i = 1; i < NR; i++)
+      if (guides[i].dot(guides[i-1]) < 0) guides[i].negate();
+    // Heavy 7-point box smoothing (15 passes) — essential for flat sheet ribbons.
+    // Beta strands have alternating C=O directions that cause visible waviness
+    // without aggressive smoothing.
+    for (let pass = 0; pass < 15; pass++) {
+      const smoothed = guides.map((g, i) => {
+        const lo = Math.max(0, i-3), hi = Math.min(NR-1, i+3);
+        const sum = new THREE.Vector3();
+        for (let k = lo; k <= hi; k++) sum.add(guides[k]);
+        return sum.normalize();
+      });
+      guides = smoothed;
+    }
+
+    const caVecs = chainAtoms.map(r => new THREE.Vector3(r.x - sceneOffset.x, r.y - sceneOffset.y, r.z - sceneOffset.z));
+    const curve  = new THREE.CatmullRomCurve3(caVecs, false, 'catmullrom', 0.5);
+    const NS     = NR * SPLINE_DIV;
+    const splinePts   = curve.getPoints(NS);
+    // Compute tangents via finite differences (getTangents not in r128)
+    const splineTangs = splinePts.map((p, i) => {
+      const prev = splinePts[Math.max(0, i-1)];
+      const next = splinePts[Math.min(NS, i+1)];
+      return next.clone().sub(prev).normalize();
+    });
+
+    const splineGuides = splinePts.map((_, si) => {
+      const t  = (si / NS) * (NR - 1);
+      const lo = Math.floor(t), hi = Math.min(lo + 1, NR - 1);
+      return guides[lo].clone().lerp(guides[hi], t - lo).normalize();
+    });
+
+    // Per-sample cross-section (halfW, halfH)
+    const hW = new Float32Array(NS + 1);
+    const hH = new Float32Array(NS + 1);
+    for (let si = 0; si <= NS; si++) {
+      const ri = Math.min(Math.floor((si / NS) * NR), NR - 1);
+      const ss = ssTypes[ri];
+      if      (ss === 'H') { hW[si] = HELIX_WIDTH/2; hH[si] = RIBBON_THICKNESS/2; }
+      else if (ss === 'E') { hW[si] = SHEET_WIDTH/2; hH[si] = RIBBON_THICKNESS/2; }
+      else                  { hW[si] = COIL_RADIUS;   hH[si] = COIL_RADIUS; }
+    }
+
+    // Smooth transitions at SS boundaries over SPLINE_DIV samples
+    const TL = SPLINE_DIV;
+    for (let si = 1; si <= NS; si++) {
+      if (Math.abs(hW[si]-hW[si-1]) > 0.01 || Math.abs(hH[si]-hH[si-1]) > 0.01) {
+        const w1=hW[si], h1=hH[si];
+        const st = Math.max(0, si-TL);
+        const w0=hW[st], h0=hH[st];
+        for (let k = st; k < si; k++) {
+          const f = (k-st)/(si-st);
+          hW[k] = w0*(1-f)+w1*f;
+          hH[k] = h0*(1-f)+h1*f;
+        }
+      }
+    }
+
+    // Sheet arrow at C-terminal end of each E segment
+    { let inE=false, eS=0;
+      for (let si = 0; si <= NS; si++) {
+        const ri  = Math.min(Math.floor((si/NS)*NR), NR-1);
+        const ss  = ssTypes[ri];
+        if (ss==='E' && !inE) { inE=true; eS=si; }
+        if (ss!=='E' && inE) {
+          const eE=si-1, aS=Math.floor(eS+(eE-eS)*0.68);
+          for (let k=aS; k<=eE; k++) {
+            const t=(k-aS)/Math.max(1,eE-aS);
+            const flare=SHEET_ARROW_W/2, base=SHEET_WIDTH/2;
+            hW[k] = t<0.3 ? base+(flare-base)*(t/0.3) : flare*Math.max(0,1-(t-0.3)/0.7);
+          }
+          inE=false;
+        }
+      }
+    }
+
+    // Color runs — each run shares its boundary sample with the adjacent run
+    const rawSS = Array.from({length: NS}, (_, si) =>
+      ssTypes[Math.min(Math.floor((si/NS)*NR), NR-1)]);
+
+    const runs = [];
+    let rS = 0;
+    for (let si = 1; si <= NS; si++) {
+      const cur = si < NS ? rawSS[si] : null, prev = rawSS[si-1];
+      if (cur !== prev || si === NS) {
+        runs.push({ ss: prev, from: rS, to: si });
+        rS = si;
+      }
+    }
+
+    for (const run of runs) {
+      const { from, to } = run;
+      if (to - from < 1) continue;
+      const pos=[], nrm=[], triIdx=[];
+
+      for (let si = from; si <= to; si++) {
+        const P  = splinePts[Math.min(si, NS)];
+        const T  = splineTangs[Math.min(si, NS)].clone().normalize();
+        const G  = splineGuides[Math.min(si, NS)].clone();
+        G.addScaledVector(T, -G.dot(T)).normalize();
+        if (G.lengthSq() < 0.0001) G.set(0, 1, 0);
+        const B  = T.clone().cross(G).normalize();
+        const hw = hW[Math.min(si, NS)], hh = hH[Math.min(si, NS)];
+
+        for (let k = 0; k < N_PROF; k++) {
+          const theta = (k/N_PROF)*Math.PI*2;
+          const wx=hw*Math.cos(theta), hy=hh*Math.sin(theta);
+          pos.push(P.x+wx*G.x+hy*B.x, P.y+wx*G.y+hy*B.y, P.z+wx*G.z+hy*B.z);
+          const nx=hh*Math.cos(theta), ny=hw*Math.sin(theta);
+          const nl=Math.sqrt(nx*nx+ny*ny)||1;
+          nrm.push((nx/nl)*G.x+(ny/nl)*B.x, (nx/nl)*G.y+(ny/nl)*B.y, (nx/nl)*G.z+(ny/nl)*B.z);
+        }
+
+        if (si < to) {
+          const base=(si-from)*N_PROF;
+          for (let k=0; k<N_PROF; k++) {
+            const a=base+k, b=base+(k+1)%N_PROF, c=base+N_PROF+k, d=base+N_PROF+(k+1)%N_PROF;
+            triIdx.push(a,b,c, b,d,c);
+          }
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal',   new THREE.Float32BufferAttribute(nrm, 3));
+      geo.setIndex(triIdx);
+      geo.computeVertexNormals();
+      const color = CARTOON_COLORS[run.ss] || CARTOON_COLORS.C;
+      molecule.add(new THREE.Mesh(geo,
+        new THREE.MeshPhongMaterial({ color, shininess: 80, specular: new THREE.Color(0.2,0.2,0.2) })));
+    }
+    }
+  }
+
+  buildSticks(allAtoms.filter(a => a.isHetatm && showHetatm && !hiddenChains.has(a.chain)));
+  buildNABackbone();
+}
+
+function buildNABackbone() {
+  const naByChain = {};
+  for (const a of allAtoms) {
+    if (a.isHetatm || a.atomName !== 'P') continue;
+    const res = a.resName.toUpperCase();
+    if (!NUCLEIC_RESIDUES.has(res)) continue;
+    if (hiddenChains.has(a.chain)) continue;
+    if (!naByChain[a.chain]) naByChain[a.chain] = [];
+    naByChain[a.chain].push(a);
+  }
+  for (const wholeChain of Object.values(naByChain)) {
+    wholeChain.sort((a, b) => a.resSeq - b.resSeq);
+    const segments = splitAtChainBreaks(wholeChain, NA_BREAK_DIST);
+    const toScene = a => new THREE.Vector3(a.x - sceneOffset.x, a.y - sceneOffset.y, a.z - sceneOffset.z);
+
+    for (let s = 1; s < segments.length; s++) {
+      const prev = segments[s-1], next = segments[s];
+      addDashedGap(toScene(prev[prev.length-1]), toScene(next[0]), 0x4caf50);
+    }
+
+    for (const atoms of segments) {
+      if (atoms.length < 2) continue;
+      const pts   = atoms.map(toScene);
+      const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
+      const tube  = new THREE.TubeGeometry(curve, pts.length * 4, 0.7, 8, false);
+      const mat   = new THREE.MeshPhongMaterial({ color: 0x4caf50, shininess: 60 });
+      molecule.add(new THREE.Mesh(tube, mat));
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  PROJECTION — True hybrid method
+//
+//  computeProjectionFast  (called every 2nd frame while dragging):
+//    Ray-cast through the cached 3D volume using R^T to sample
+//    voxels along the current world-Z direction.  O(PGRID² × NV).
+//    Volume is rebuilt only when structure or B-factor changes.
+//
+//  computeProjection  (called once on mouseup / after load):
+//    Accurate per-atom 2D Gaussian sum — analytically integrates
+//    Peng scattering factors along Z after applying the current
+//    rotation.  Visibly sharper than the volume version.
+//
+//  Grid constraints (both paths share the same box):
+//    • Box = 1.5 × longest ATOM/non-HOH/non-ion dimension
+//    • Pixel size ≥ 1 Å enforced
+// ════════════════════════════════════════════════════════════
+
+// ── Shared: compute grid bounds (1.5× longest dim, min 1Å) ──────
+// Always uses the full-structure box (locked on load) so that hiding chains
+// never shrinks or recenters the projection canvas.
+function getProjectionBox() {
+  if (activeProjBox) return activeProjBox;
+  if (fullProjBox)   return fullProjBox;
+  return computeProjBoxFrom(visAtoms);
+}
+
+function computeProjBoxFrom(atoms) {
+  const macroAtoms = atoms.filter(a => {
+    if (!a.isHetatm) return true;
+    if (a.resName === 'HOH' || a.resName === 'WAT' || a.resName === 'H2O' || a.resName === 'DOD') return false;
+    if (a.resName.trim().toUpperCase() === a.el) return false;
+    return true;
+  });
+  const src = macroAtoms.length > 0 ? macroAtoms : atoms;
+  let xmn=Infinity,xmx=-Infinity,ymn=Infinity,ymx=-Infinity,zmn=Infinity,zmx=-Infinity;
+  for (const a of src) {
+    xmn=Math.min(xmn,a.x); xmx=Math.max(xmx,a.x);
+    ymn=Math.min(ymn,a.y); ymx=Math.max(ymx,a.y);
+    zmn=Math.min(zmn,a.z); zmx=Math.max(zmx,a.z);
+  }
+  const longestDim = Math.max(xmx-xmn, ymx-ymn, zmx-zmn);
+  const boxSize    = longestDim * boxMultiplier;
+  const delta      = Math.max(1.0, boxSize / PROJ_GRID);
+  const nVox       = Math.ceil(boxSize / delta) + 2;
+  const cx=(xmn+xmx)/2, cy=(ymn+ymx)/2, cz=(zmn+zmx)/2;
+  return { delta, nVox, cx, cy, cz, boxSize };
+}
+
+// ════════════════════════════════════════════════════════════
+//  FOURIER LOW-PASS FILTER
+//
+//  The 2D projection is band-limited by multiplying its Fourier
+//  transform with a radially symmetric raised-cosine mask:
+//
+//      M(k) = 1                                    k ≤ kc − Δ/2
+//             ½[1 + cos(π (k − kc + Δ/2) / Δ)]     |k − kc| < Δ/2
+//             0                                    k ≥ kc + Δ/2
+//
+//  kc = 1/res (Å⁻¹) is the cutoff spatial frequency and Δ = 2
+//  Fourier pixels is the soft-edge width.  The cosine taper is
+//  what keeps a hard cutoff from ringing (Gibbs) around the
+//  particle — the same convention used by RELION/cryoSPARC.
+// ════════════════════════════════════════════════════════════
+const _twiddle = new Map();          // n → precomputed exp(−2πik/n) tables
+function getTwiddle(n) {
+  let t = _twiddle.get(n);
+  if (!t) {
+    const c = new Float64Array(n >> 1), s = new Float64Array(n >> 1);
+    for (let i = 0; i < (n >> 1); i++) { const a = -2 * Math.PI * i / n; c[i] = Math.cos(a); s[i] = Math.sin(a); }
+    t = { c, s };
+    _twiddle.set(n, t);
+  }
+  return t;
+}
+
+// In-place iterative radix-2 FFT on (re, im); n must be a power of two.
+function fft1d(re, im, n, inverse) {
+  for (let i = 1, j = 0; i < n; i++) {         // bit-reversal permutation
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  const { c, s } = getTwiddle(n);
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1, stride = n / len;
+    for (let i = 0; i < n; i += len) {
+      for (let j = 0, k = 0; j < half; j++, k += stride) {
+        const wr = c[k], wi = inverse ? -s[k] : s[k];
+        const p = i + j, q = p + half;
+        const vr = re[q] * wr - im[q] * wi;
+        const vi = re[q] * wi + im[q] * wr;
+        re[q] = re[p] - vr; im[q] = im[p] - vi;
+        re[p] += vr;        im[p] += vi;
+      }
+    }
+  }
+  if (inverse) { const inv = 1 / n; for (let i = 0; i < n; i++) { re[i] *= inv; im[i] *= inv; } }
+}
+
+// Separable 2D FFT over a P×P row-major complex array.
+function fft2d(re, im, P, inverse) {
+  const lr = new Float64Array(P), li = new Float64Array(P);
+  for (let y = 0; y < P; y++) {                 // rows
+    const off = y * P;
+    for (let x = 0; x < P; x++) { lr[x] = re[off + x]; li[x] = im[off + x]; }
+    fft1d(lr, li, P, inverse);
+    for (let x = 0; x < P; x++) { re[off + x] = lr[x]; im[off + x] = li[x]; }
+  }
+  for (let x = 0; x < P; x++) {                 // columns
+    for (let y = 0; y < P; y++) { lr[y] = re[y * P + x]; li[y] = im[y * P + x]; }
+    fft1d(lr, li, P, inverse);
+    for (let y = 0; y < P; y++) { re[y * P + x] = lr[y]; im[y * P + x] = li[y]; }
+  }
+}
+
+let _lpMask = null, _lpKey = '', _lpBand = [0, 0];
+function getLowpassMask(P, pixSize, res) {
+  const key = P + '|' + pixSize.toFixed(5) + '|' + res.toFixed(3) + '|' + lowpassTaper.toFixed(3);
+  if (_lpKey === key && _lpMask) return _lpMask;
+  const m    = new Float32Array(P * P);
+  const dk   = 1 / (P * pixSize);   // Fourier pixel size, Å⁻¹
+  const kc   = 1 / res;             // cutoff frequency, Å⁻¹
+  const nyq  = 1 / (2 * pixSize);   // Nyquist frequency, Å⁻¹
+
+  // Transition width as a fraction of kc, not as a count of Fourier pixels.
+  // Tying it to kc keeps the roll-off shape — and therefore the ringing —
+  // independent of box size; 2 Fourier pixels was 9% of kc in a 128 Å box
+  // but only 2% in a 500 Å one.
+  let edge = lowpassTaper * kc;
+  if (kc + edge / 2 > nyq) edge = 2 * (nyq - kc);  // finish the roll-off inside Nyquist
+  if (edge > 2 * kc) edge = 2 * kc;                // keep k0 ≥ 0
+  if (edge < 2 * dk) edge = 2 * dk;                // never narrower than one Fourier sample
+  const k0 = kc - edge / 2, k1 = kc + edge / 2;
+  _lpBand = [k0, k1];
+
+  for (let y = 0; y < P; y++) {
+    const fy = (y <= P / 2 ? y : y - P) * dk;
+    for (let x = 0; x < P; x++) {
+      const fx = (x <= P / 2 ? x : x - P) * dk;
+      const k  = Math.sqrt(fx * fx + fy * fy);
+      m[y * P + x] = k <= k0 ? 1
+                   : k >= k1 ? 0
+                   : 0.5 * (1 + Math.cos(Math.PI * (k - k0) / edge));
+    }
+  }
+  _lpMask = m; _lpKey = key;
+  return m;
+}
+
+// Scratch buffers reused across frames so dragging doesn't churn the GC.
+const _lpBufs = new Map();
+function getLpBufs(P, PGRID) {
+  let b = _lpBufs.get(P);
+  if (!b || b.out.length !== PGRID * PGRID) {
+    b = { re: new Float64Array(P * P), im: new Float64Array(P * P), out: new Float32Array(PGRID * PGRID) };
+    _lpBufs.set(P, b);
+  } else { b.re.fill(0); b.im.fill(0); }
+  return b;
+}
+
+// Band-limit a PGRID×PGRID projection to `res` Å.  pixSize is Å/pixel.
+function lowPassFilter(grid, PGRID, pixSize, res) {
+  if (!(res > 0) || !(pixSize > 0)) return grid;
+  if (res <= 2 * pixSize) return grid;          // cutoff at/beyond Nyquist → nothing to remove
+
+  let P = 1; while (P < PGRID) P <<= 1;          // zero-pad to a power of two (192→256, 384→512)
+  const off = (P - PGRID) >> 1;
+  const { re, im, out } = getLpBufs(P, PGRID);
+
+  for (let y = 0; y < PGRID; y++) {
+    const src = y * PGRID, dst = (y + off) * P + off;
+    for (let x = 0; x < PGRID; x++) re[dst + x] = grid[src + x];
+  }
+
+  fft2d(re, im, P, false);
+  const mask = getLowpassMask(P, pixSize, res);
+  for (let i = 0; i < P * P; i++) { re[i] *= mask[i]; im[i] *= mask[i]; }
+  fft2d(re, im, P, true);
+
+  for (let y = 0; y < PGRID; y++) {
+    const dst = y * PGRID, src = (y + off) * P + off;
+    for (let x = 0; x < PGRID; x++) out[dst + x] = re[src + x];
+  }
+  return out;
+}
+
+function updateLowpassNote(pixSize) {
+  const el = document.getElementById('lp-note');
+  if (!el) return;
+  const nyq = 2 * pixSize;
+  if (!lowpassOn) {
+    el.textContent = 'FILTER OFF · NYQUIST ' + nyq.toFixed(2) + ' Å';
+    el.style.color = 'var(--dim)';
+  } else if (lowpassRes <= nyq) {
+    el.textContent = 'BEYOND NYQUIST (' + nyq.toFixed(2) + ' Å) — NO EFFECT';
+    el.style.color = 'var(--amber)';
+  } else {
+    // _lpBand holds the k0/k1 actually used, after Nyquist clamping.
+    const hi = _lpBand[1] > 0 ? (1 / _lpBand[1]).toFixed(1) : '—';
+    const lo = _lpBand[0] > 0 ? (1 / _lpBand[0]).toFixed(1) : '∞';
+    el.textContent = 'ROLL-OFF ' + hi + '–' + lo + ' Å · NYQUIST ' + nyq.toFixed(2) + ' Å';
+    el.style.color = 'var(--muted)';
+  }
+}
+
+// ── Shared: render a flat grid to the projection canvas ─────────
+function renderGrid(grid, PGRID, delta, nVox) {
+  // Band-limit before normalisation so the displayed contrast reflects
+  // the filtered image (both the fast and accurate paths land here).
+  if (lowpassOn) grid = lowPassFilter(grid, PGRID, delta, lowpassRes);
+  updateLowpassNote(delta);
+
+  const nonZero = [];
+  for (let i = 0; i < grid.length; i++) if (grid[i] > 0) nonZero.push(grid[i]);
+  nonZero.sort((a,b) => a-b);
+  const ref = normMode === 'p100'
+    ? (nonZero.length > 0 ? nonZero[nonZero.length - 1] : 1)          // true maximum
+    : (nonZero.length > 0 ? nonZero[Math.floor(nonZero.length * 0.99)] : 1); // 99th pct
+  const scale = brightness / (ref > 0 ? ref : 1);
+
+  projCanvas.width  = PGRID;
+  projCanvas.height = PGRID;
+  const imgData = projCtx.createImageData(PGRID, PGRID);
+  const d = imgData.data;
+  for (let i = 0; i < PGRID * PGRID; i++) {
+    const v = hotColormap(Math.min(1, grid[i] * scale));
+    const idx = i * 4;
+    d[idx]=v; d[idx+1]=v; d[idx+2]=v; d[idx+3]=255;
+  }
+  projCtx.putImageData(imgData, 0, 0);
+
+  // ── Scale bar: integer multiple of 10 Å, ~30% of box width ──────
+  const boxAng    = nVox * delta;
+  const rawTarget = boxAng * 0.30;
+  const step = rawTarget >= 500 ? 100 :
+               rawTarget >= 100 ? 50  :
+               rawTarget >= 50  ? 20  : 10;
+  const targetAng = Math.max(step, Math.floor(rawTarget / step) * step);
+  const cssWidth  = projCanvas.clientWidth || projCanvas.offsetWidth || PGRID;
+  const barPx     = Math.round(targetAng * cssWidth / boxAng);
+  const barEl  = document.getElementById('scalebar-line');
+  const barLbl = document.getElementById('scalebar-label');
+  if (barEl)  barEl.style.width  = barPx + 'px';
+  if (barLbl) barLbl.textContent = targetAng + ' Å';
+
+  // ── Update particle box and pixel size stats ─────────────────────
+  const boxEl = document.getElementById('s-box');
+  const pixEl = document.getElementById('s-pixel');
+  if (boxEl)  boxEl.textContent = boxAng.toFixed(0) + ' Å';
+  if (pixEl)  pixEl.textContent = delta.toFixed(2) + ' Å/px';
+}
+
+// ── BUILD 3D VOLUME (once per structure change) ─────────────────
+function buildCachedVolume() {
+  const { delta, nVox, cx, cy, cz } = getProjectionBox();
+  const xmin3 = cx - nVox/2*delta;
+  const ymin3 = cy - nVox/2*delta;
+  const zmin3 = cz - nVox/2*delta;
+
+  const vol = new Float32Array(nVox * nVox * nVox);
+
+  const elKernelMap = new Map();
+  for (const a of visAtoms)
+    if (!elKernelMap.has(a.el)) elKernelMap.set(a.el, getPengKernel(a.el));
+
+  let globalCutoff2 = 0;
+  for (const { cutoff2 } of elKernelMap.values()) if (cutoff2 > globalCutoff2) globalCutoff2 = cutoff2;
+  const cellCut = Math.ceil(Math.sqrt(globalCutoff2) / delta);
+
+  for (const a of visAtoms) {
+    const { terms, cutoff2 } = elKernelMap.get(a.el);
+    const gxi = Math.round((a.x - xmin3) / delta);
+    const gyi = Math.round((a.y - ymin3) / delta);
+    const gzi = Math.round((a.z - zmin3) / delta);
+    const x0=Math.max(0,gxi-cellCut), x1=Math.min(nVox-1,gxi+cellCut);
+    const y0=Math.max(0,gyi-cellCut), y1=Math.min(nVox-1,gyi+cellCut);
+    const z0=Math.max(0,gzi-cellCut), z1=Math.min(nVox-1,gzi+cellCut);
+    for (let gz=z0; gz<=z1; gz++) {
+      const dz2 = ((gz*delta+zmin3)-a.z)**2;
+      if (dz2 > cutoff2) continue;
+      for (let gy=y0; gy<=y1; gy++) {
+        const dy2 = ((gy*delta+ymin3)-a.y)**2 + dz2;
+        if (dy2 > cutoff2) continue;
+        for (let gx=x0; gx<=x1; gx++) {
+          const r2 = ((gx*delta+xmin3)-a.x)**2 + dy2;
+          if (r2 > cutoff2) continue;
+          let phi = 0;
+          for (const { A, inv2sig2 } of terms) phi += A * Math.exp(-inv2sig2 * r2);
+          vol[gz*nVox*nVox + gy*nVox + gx] += phi;
+        }
+      }
+    }
+  }
+
+  cachedVolume   = vol;
+  cachedVolGridW = nVox;
+  cachedVolGridD = nVox;
+  cachedVolDelta = delta;
+  cachedVolXmin  = xmin3;
+  cachedVolYmin  = ymin3;
+  cachedVolZmin  = zmin3;
+  volumeDirty    = false;
+  return { delta, nVox };
+}
+
+// ── FAST PATH: volume raycast (during drag) ──────────────────────
+function computeProjectionFast() {
+  if (visAtoms.length === 0) return;
+
+  if (volumeDirty || !cachedVolume) buildCachedVolume();
+
+  const NV     = cachedVolGridW;
+  const delta  = cachedVolDelta;
+  const center = NV / 2;
+
+  // R^T maps world-space ray coords → volume (molecule) frame.
+  const m = new THREE.Matrix4().makeRotationFromQuaternion(molecule.quaternion).elements;
+  const r00=m[0],r01=m[1],r02=m[2];
+  const r10=m[4],r11=m[5],r12=m[6];
+  const r20=m[8],r21=m[9],r22=m[10];
+
+  const PGRID = PROJ_GRID;
+  const half  = PGRID / 2;
+  // Scale factor: each output pixel spans NV/PGRID voxels so the two paths
+  // cover the exact same physical box (NV*delta Å) and never mismatch on snap.
+  const pix2vox = NV / PGRID;
+  const grid  = new Float32Array(PGRID * PGRID);
+
+  for (let py = 0; py < PGRID; py++) {
+    const fpy = (py - half) * pix2vox;   // pixel 0 → vox edge at -NV/2, matches accurate path xmin
+    for (let px = 0; px < PGRID; px++) {
+      const fpx = (px - half) * pix2vox;
+      let sum = 0;
+      for (let step = 0; step < NV; step++) {
+        const fpz = step - NV/2 + 0.5;
+        const vox_x = center + r00*fpx + r01*fpy + r02*fpz;
+        const vox_y = center + r10*fpx + r11*fpy + r12*fpz;
+        const vox_z = center + r20*fpx + r21*fpy + r22*fpz;
+
+        const x0i = vox_x|0, y0i = vox_y|0, z0i = vox_z|0;
+        if (x0i<0||x0i>=NV-1||y0i<0||y0i>=NV-1||z0i<0||z0i>=NV-1) continue;
+        const xf=vox_x-x0i, yf=vox_y-y0i, zf=vox_z-z0i;
+        const xf1=1-xf, yf1=1-yf, zf1=1-zf;
+        const s=NV, ss=NV*NV, i000=z0i*ss+y0i*s+x0i;
+        sum +=
+          cachedVolume[i000        ]*xf1*yf1*zf1 + cachedVolume[i000+1      ]*xf*yf1*zf1 +
+          cachedVolume[i000+s      ]*xf1*yf *zf1 + cachedVolume[i000+s+1    ]*xf*yf *zf1 +
+          cachedVolume[i000+ss     ]*xf1*yf1*zf  + cachedVolume[i000+ss+1   ]*xf*yf1*zf  +
+          cachedVolume[i000+ss+s   ]*xf1*yf *zf  + cachedVolume[i000+ss+s+1 ]*xf*yf *zf;
+      }
+      grid[(PGRID-1-py)*PGRID+px] = sum;
+    }
+  }
+
+  // The output image is PGRID pixels wide at (delta * pix2vox) Å/pixel, so the
+  // extent argument is PGRID — same convention as the accurate path.
+  renderGrid(grid, PGRID, delta * pix2vox, PGRID);
+  document.getElementById('s-time').textContent = '— ms';
+}
+
+// ── ACCURATE PATH: per-atom 2D Gaussian sum (on mouseup / load) ─
+function computeProjection() {
+  if (visAtoms.length === 0) return;
+  const t0 = performance.now();
+
+  // Rotate all atoms into world frame
+  const rotM = new THREE.Matrix4().makeRotationFromQuaternion(molecule.quaternion);
+  const tmp  = new THREE.Vector3();
+  const N    = visAtoms.length;
+  const rx   = new Float32Array(N);
+  const ry   = new Float32Array(N);
+
+  for (let i = 0; i < N; i++) {
+    const a = visAtoms[i];
+    tmp.set(a.x, a.y, a.z).applyMatrix4(rotM);
+    rx[i] = tmp.x; ry[i] = tmp.y;
+  }
+
+  // Grid bounds — same physical box and same center as the volume so Å/pixel
+  // matches the fast path exactly.
+  // The volume center is (cx,cy,cz) in molecule space.  After rotation R it
+  // appears at R·(cx,cy,cz).xy in world space — that must be the grid center.
+  const { delta: volDelta, nVox, cx, cy, cz } = getProjectionBox();
+  const span      = nVox * volDelta;           // total box in Å
+  const effDelta  = span / PROJ_GRID;          // Å/pixel — matches fast path
+
+  // Project the bounding-box centre through the current rotation
+  const boxCenWorld = new THREE.Vector3(cx, cy, cz).applyMatrix4(rotM);
+  const xmin = boxCenWorld.x - span / 2;
+  const ymin = boxCenWorld.y - span / 2;
+
+  const PGRID = PROJ_GRID;
+  const grid  = new Float32Array(PGRID * PGRID);
+
+  const elKernelMap = new Map();
+  for (const a of visAtoms)
+    if (!elKernelMap.has(a.el)) elKernelMap.set(a.el, getPengKernel(a.el));
+
+  let globalCutoff2 = 0;
+  for (const { cutoff2 } of elKernelMap.values()) if (cutoff2 > globalCutoff2) globalCutoff2 = cutoff2;
+  const cellCut = Math.ceil(Math.sqrt(globalCutoff2) / effDelta);
+
+  for (let i = 0; i < N; i++) {
+    const ax = rx[i], ay = ry[i];
+    const { terms, cutoff2 } = elKernelMap.get(visAtoms[i].el);
+    const gxi = Math.round((ax - xmin) / effDelta);
+    const gyi = Math.round((ay - ymin) / effDelta);
+    const x0=Math.max(0,gxi-cellCut), x1=Math.min(PGRID-1,gxi+cellCut);
+    const y0=Math.max(0,gyi-cellCut), y1=Math.min(PGRID-1,gyi+cellCut);
+    for (let gy=y0; gy<=y1; gy++) {
+      const worldY = gy*effDelta+ymin;
+      const dy2 = (worldY-ay)**2;
+      if (dy2 > cutoff2) continue;
+      for (let gx=x0; gx<=x1; gx++) {
+        const rho2 = (gx*effDelta+xmin-ax)**2 + dy2;
+        if (rho2 > cutoff2) continue;
+        let phi = 0;
+        for (const { A, inv2sig2 } of terms) phi += A * Math.exp(-inv2sig2 * rho2);
+        grid[(PGRID-1-gy)*PGRID+gx] += phi;
+      }
+    }
+  }
+
+  renderGrid(grid, PGRID, effDelta, PGRID);
+
+  const elapsed = performance.now() - t0;
+  lastProjTime = elapsed;
+  document.getElementById('s-time').textContent = elapsed.toFixed(1) + ' ms';
+}
+
+// Grayscale colormap — mimics CryoSPARC 2D class averages
+function hotColormap(t) {
+  return Math.pow(Math.min(1, Math.max(0, t)), 0.45) * 255 | 0;
+}
+
+// ════════════════════════════════════════════════════════════
+//  STATS
+// ════════════════════════════════════════════════════════════
+function updateStats() {
+  const residues = new Set(allAtoms.map(a => `${a.chain}:${a.resSeq}`)).size;
+  const chains   = new Set(allAtoms.map(a => a.chain)).size;
+  let xmx=-Infinity,xmn=Infinity,ymx=-Infinity,ymn=Infinity,zmx=-Infinity,zmn=Infinity;
+  for (const a of allAtoms) {
+    xmx=Math.max(xmx,a.x); xmn=Math.min(xmn,a.x);
+    ymx=Math.max(ymx,a.y); ymn=Math.min(ymn,a.y);
+    zmx=Math.max(zmx,a.z); zmn=Math.min(zmn,a.z);
+  }
+  document.getElementById('s-atoms').textContent  = allAtoms.length.toLocaleString();
+  document.getElementById('s-res').textContent    = residues.toLocaleString();
+  document.getElementById('s-chains').textContent = chains;
+  document.getElementById('s-size').textContent   =
+    `${(xmx-xmn).toFixed(0)}×${(ymx-ymn).toFixed(0)}×${(zmx-zmn).toFixed(0)}`;
+  // s-box and s-pixel are filled by renderGrid after first projection
+}
+
+// ════════════════════════════════════════════════════════════
+//  ANIMATION LOOP
+// ════════════════════════════════════════════════════════════
+let projThrottle = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (projNeedsUpdate) {
+    projThrottle++;
+    if (projThrottle >= 2) { // update every 2nd frame during drag
+      computeProjectionFast();
+      projNeedsUpdate = false;
+      projThrottle = 0;
+    }
+  }
+
+  renderer.render(scene, camera);
+
+  // FPS
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsLast > 1000) {
+    fps = fpsFrames;
+    fpsFrames = 0;
+    fpsLast = now;
+    document.getElementById('fps-display').textContent = `${fps} fps`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  CONTROLS & EVENTS
+// ════════════════════════════════════════════════════════════
+// Step a slider by ±1 tick and fire its input event
+function stepSlider(id, dir) {
+  const el = document.getElementById(id);
+  const step = parseFloat(el.step) || 1;
+  const val  = Math.min(parseFloat(el.max), Math.max(parseFloat(el.min), parseFloat(el.value) + dir * step));
+  el.value = val;
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setupControls() {
+  const bind = (id, cb) => document.getElementById(id).addEventListener('input', cb);
+
+  bind('r-lowpass', e => {
+    lowpassRes = parseFloat(e.target.value);
+    document.getElementById('v-lowpass').textContent = lowpassRes.toFixed(1);
+    if (allAtoms.length) computeProjection();
+  });
+  bind('r-lptaper', e => {
+    lowpassTaper = parseFloat(e.target.value);
+    document.getElementById('v-lptaper').innerHTML = lowpassTaper.toFixed(2) + '× k<sub>c</sub>';
+    if (allAtoms.length) computeProjection();
+  });
+  lowpassTaper = DEFAULT_TAPER;
+  document.getElementById('r-lptaper').value = DEFAULT_TAPER;
+  document.getElementById('v-lptaper').innerHTML = DEFAULT_TAPER.toFixed(2) + '× k<sub>c</sub>';
+
+  lowpassRes = DEFAULT_LOWPASS;
+  document.getElementById('r-lowpass').value = DEFAULT_LOWPASS;
+  document.getElementById('v-lowpass').textContent = DEFAULT_LOWPASS.toFixed(1);
+
+  bind('r-bright', e => {
+    brightness = parseFloat(e.target.value);
+    document.getElementById('v-bright').textContent = brightness.toFixed(1) + '×';
+    if (allAtoms.length) { computeProjection(); }
+  });
+
+  bind('r-ambient', e => {
+    ambientStr = parseFloat(e.target.value);
+    document.getElementById('v-ambient').textContent = ambientStr.toFixed(2) + '×';
+    if (ambientLight) ambientLight.intensity = ambientStr;
+  });
+
+  // Grid resolution: select element with discrete pixel options
+  document.getElementById('r-grid').addEventListener('change', e => {
+    PROJ_GRID = parseInt(e.target.value);
+    volumeDirty = true;
+    if (allAtoms.length) computeProjection();
+  });
+  PROJ_GRID = 128; // match the default selected option
+
+  bind('r-boxmult', e => {
+    boxMultiplier = parseFloat(e.target.value);
+    document.getElementById('v-boxmult').textContent = boxMultiplier.toFixed(1) + '×';
+    // Recompute the full projection box with new multiplier
+    if (allAtoms.length) {
+      fullProjBox  = computeProjBoxFrom(allAtoms);
+      activeProjBox = null;
+      volumeDirty  = true;
+      computeProjection();
+    }
+  });
+}
+
+function setupEvents() {
+  const fileInput   = document.getElementById('file-input');
+  const canvas      = document.getElementById('three-canvas');
+
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  // Drag & drop
+  window.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragover'); });
+  window.addEventListener('dragleave', e => {
+    if (!e.relatedTarget) document.body.classList.remove('dragover');
+  });
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    document.body.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+
+  // Mouse drag → rotate molecule
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true;
+    prevMouse = { x: e.clientX, y: e.clientY };
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    const dx = e.clientX - prevMouse.x;
+    const dy = e.clientY - prevMouse.y;
+    prevMouse = { x: e.clientX, y: e.clientY };
+    // Arcball: rotate around world-space Y for horizontal drag,
+    // world-space X for vertical drag. Compose with current quaternion
+    // so accumulated rotations never conflict.
+    const qY = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0), dx * 0.008);
+    const qX = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(1, 0, 0), dy * 0.008);
+    molecule.quaternion.premultiply(qY).premultiply(qX);
+    projNeedsUpdate = true;
+  });
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      canvas.classList.remove('dragging');
+      projNeedsUpdate = false;  // prevent animate loop from overwriting with fast path
+      projThrottle = 0;
+      if (allAtoms.length) computeProjection();
+    }
+  });
+
+  // Scroll to zoom
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    camera.position.z = Math.max(5, Math.min(800, camera.position.z + e.deltaY * 0.08));
+  }, { passive: false });
+
+  // Touch drag
+  let lastTouch = null;
+  canvas.addEventListener('touchstart', e => {
+    lastTouch = e.touches[0];
+  }, { passive: true });
+  canvas.addEventListener('touchmove', e => {
+    if (!lastTouch) return;
+    const t = e.touches[0];
+    const dx = t.clientX - lastTouch.clientX;
+    const dy = t.clientY - lastTouch.clientY;
+    lastTouch = t;
+    const qY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), dx * 0.01);
+    const qX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0), dy * 0.01);
+    molecule.quaternion.premultiply(qY).premultiply(qX);
+    projNeedsUpdate = true;
+  }, { passive: true });
+  canvas.addEventListener('touchend', () => {
+    lastTouch = null;
+    projNeedsUpdate = false;
+    projThrottle = 0;
+    if (allAtoms.length) computeProjection();
+  });
+
+  // Resize window
+  window.addEventListener('resize', () => {
+    const panel = document.getElementById('viewer-panel');
+    const W = panel.clientWidth, H = panel.clientHeight;
+    camera.aspect = W/H;
+    camera.updateProjectionMatrix();
+    renderer.setSize(W, H);
+  });
+
+  // ── Drag handle: resize stats vs controls panel ──────────────
+  const handle = document.getElementById('resize-handle');
+  const statsSection = document.getElementById('stats-section');
+  let resizeDragging = false, resizeStartY = 0, resizeStartH = 0;
+
+  handle.addEventListener('mousedown', e => {
+    resizeDragging = true;
+    resizeStartY = e.clientY;
+    resizeStartH = statsSection.offsetHeight;
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!resizeDragging) return;
+    const dy = e.clientY - resizeStartY;
+    const newH = Math.max(40, Math.min(300, resizeStartH + dy));
+    statsSection.style.flexShrink = '0';
+    statsSection.style.height = newH + 'px';
+    statsSection.style.overflow = 'hidden';
+  });
+  window.addEventListener('mouseup', e => {
+    if (resizeDragging) {
+      resizeDragging = false;
+      document.body.style.userSelect = '';
+    }
+  });
+}
+// ════════════════════════════════════════════════════════════
+//  CHAIN VISIBILITY — text-input based
+// ════════════════════════════════════════════════════════════
+function buildChainPanel() {
+  hiddenChains.clear();
+  const chains = [...new Set(allAtoms.map(a => a.chain))].sort();
+  const section   = document.getElementById('chain-section');
+  const available = document.getElementById('chain-available');
+  const input     = document.getElementById('chain-hide-input');
+
+  if (chains.length <= 1) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  input.value = '';
+  input.classList.remove('invalid');
+
+  // Render clickable chain chips
+  renderChainChips(chains);
+
+  // Enter key applies
+  input.onkeydown = e => { if (e.key === 'Enter') applyChainInput(); };
+}
+
+function renderChainChips(chains) {
+  const available = document.getElementById('chain-available');
+  if (!available) return;
+  const allChains = chains || [...new Set(allAtoms.map(a => a.chain))].sort();
+  available.innerHTML = allChains.map(c => {
+    const isHidden = hiddenChains.has(c);
+    return `<span class="chain-id${isHidden ? ' hidden-chip' : ''}" title="Click to toggle chain ${c}" onclick="quickToggleChain('${c}')">${c}</span>`;
+  }).join('');
+}
+
+function quickToggleChain(chain) {
+  // Click on a chip: toggle that single chain and sync the text input
+  if (hiddenChains.has(chain)) hiddenChains.delete(chain);
+  else hiddenChains.add(chain);
+
+  // Sync input field to current hidden set
+  const input = document.getElementById('chain-hide-input');
+  if (input) {
+    input.value = [...hiddenChains].sort().join(',');
+    input.classList.remove('invalid');
+  }
+  const allChains = [...new Set(allAtoms.map(a => a.chain))].sort();
+  renderChainChips(allChains);
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+function applyChainInput() {
+  const input = document.getElementById('chain-hide-input');
+  if (!input) return;
+
+  const raw   = input.value.trim();
+  const allChains = new Set(allAtoms.map(a => a.chain));
+
+  if (!raw) {
+    // Empty = show all
+    hiddenChains.clear();
+    input.classList.remove('invalid');
+  } else {
+    const requested = raw.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+    // Validate — every token must be a known chain
+    const invalid = requested.filter(c => !allChains.has(c));
+    if (invalid.length) {
+      input.classList.add('invalid');
+      setStatus(`⚠ Unknown chain(s): ${invalid.join(', ')}`);
+      return;
+    }
+    input.classList.remove('invalid');
+    hiddenChains = new Set(requested);
+  }
+
+  renderChainChips([...allChains].sort());
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+function reboxProjection(mode) {
+  if (mode === 'reset') {
+    activeProjBox = null;
+  } else if (mode === 'rebox') {
+    // Recompute both box and center from visible atoms
+    activeProjBox = computeProjBoxFrom(visAtoms.length ? visAtoms : allAtoms);
+  }
+
+  // Visual feedback: highlight active button
+  ['btn-rebox','btn-resetbox'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.borderColor = '';
+  });
+  if (mode !== 'reset') {
+    const el = document.getElementById('btn-rebox');
+    if (el) el.style.borderColor = 'var(--cyan)';
+  }
+
+  volumeDirty = true;
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+// ════════════════════════════════════════════════════════════
+//  TOGGLE HANDLERS
+// ════════════════════════════════════════════════════════════
+
+function toggleFootnote() {
+  const fn  = document.getElementById('footnote');
+  const btn = document.getElementById('footnote-toggle');
+  const hiding = !fn.classList.contains('hidden');
+  fn.classList.toggle('hidden', hiding);
+  btn.classList.toggle('on', !hiding);
+  btn.textContent = hiding ? 'METHOD ▸' : 'METHOD ▾';
+}
+
+function setNormMode(mode) {
+  normMode = mode;
+  document.getElementById('ntab-p99').classList.toggle('active',  mode === 'p99');
+  document.getElementById('ntab-p100').classList.toggle('active', mode === 'p100');
+  if (allAtoms.length) computeProjection();
+}
+
+function toggleLowpass() {
+  lowpassOn = !lowpassOn;
+  document.getElementById('t-lowpass').classList.toggle('on', lowpassOn);
+  const grp = document.getElementById('lp-group');
+  if (grp) { grp.style.opacity = lowpassOn ? '1' : '0.45'; }
+  const gt = document.getElementById('lptaper-group');
+  if (gt) gt.style.opacity = lowpassOn ? '1' : '0.45';
+  for (const id of ['r-lowpass', 'r-lptaper']) {
+    const sl = document.getElementById(id);
+    if (sl) sl.disabled = !lowpassOn;
+  }
+  if (allAtoms.length) computeProjection();
+}
+
+function toggleCartoon() {
+  cartoonMode = !cartoonMode;
+  document.getElementById('t-cartoon').classList.toggle('on', cartoonMode);
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+function toggleHetatm() {
+  showHetatm = !showHetatm;
+  const el = document.getElementById('t-hetatm');
+  el.classList.toggle('on', showHetatm);
+  if (allAtoms.length) { buildScene(); computeProjection(); }
+}
+
+// ════════════════════════════════════════════════════════════
+//  UTILITY BUTTONS
+// ════════════════════════════════════════════════════════════
+function resetView() {
+  molecule.quaternion.identity();
+  molecule.position.set(0, 0, 0);
+  if (allAtoms.length) computeProjection();
+}
+
+function alignView(axis) {
+  const e = new THREE.Euler();
+  if (axis === 'x') e.set(0, Math.PI/2, 0);
+  if (axis === 'y') e.set(Math.PI/2, 0, 0);
+  if (axis === 'z') e.set(0, 0, 0);
+  molecule.quaternion.setFromEuler(e);
+  if (allAtoms.length) computeProjection();
+}
+
+// ════════════════════════════════════════════════════════════
+//  EXPORT VIEW TO CHIMERAX
+//
+//  "view matrix" takes a 3x3 rotation about the scene origin followed
+//  by a translation, as 12 row-major numbers (translation = the 4th,
+//  8th and 12th).  This viewer instead rotates about the molecule
+//  centroid, which centerAtoms() moved to the origin.  Rotating about
+//  a point c rather than the origin is
+//        p' = R(p - c) + c = R·p + (c - R·c)
+//  so the translation column is  t = c - R·c  with c the centroid in
+//  the file's original coordinates.  Both programs use a right-handed
+//  Y-up frame with the camera looking down -Z, so R itself carries over
+//  unchanged.
+// ════════════════════════════════════════════════════════════
+function buildChimeraXCommands() {
+  const e = new THREE.Matrix4().makeRotationFromQuaternion(molecule.quaternion).elements;
+  // THREE stores column-major; read it back out row-major.
+  const r = [[e[0], e[4], e[8]],
+             [e[1], e[5], e[9]],
+             [e[2], e[6], e[10]]];
+
+  const c = origCentroid;
+  const t = [
+    c.x - (r[0][0]*c.x + r[0][1]*c.y + r[0][2]*c.z),
+    c.y - (r[1][0]*c.x + r[1][1]*c.y + r[1][2]*c.z),
+    c.z - (r[2][0]*c.x + r[2][1]*c.y + r[2][2]*c.z)
+  ];
+
+  const f = v => (Math.abs(v) < 1e-10 ? 0 : +v.toPrecision(8));
+  const nums = [
+    f(r[0][0]), f(r[0][1]), f(r[0][2]), f(t[0]),
+    f(r[1][0]), f(r[1][1]), f(r[1][2]), f(t[1]),
+    f(r[2][0]), f(r[2][1]), f(r[2][2]), f(t[2])
+  ].join(',');
+
+  // The molecule centre is a fixed point of the transform above, so it
+  // stays at c. Park the camera down +Z from it, far enough back that the
+  // projection box fits ChimeraX's default 30° horizontal field of view.
+  const { boxSize } = getProjectionBox();
+  const dist = (boxSize / 2) / Math.tan(15 * Math.PI / 180);
+  const cam  = [1, 0, 0, f(c.x), 0, 1, 0, f(c.y), 0, 0, 1, f(c.z + dist)].join(',');
+
+  const lines = [
+    '# View exported from Fast 2D Projection Visualization',
+    '# Assumes the structure is model #1 — change the spec if not.',
+    `view matrix models #1,${nums}`,
+    `view matrix camera ${cam}`,
+    '# camera ortho   ← uncomment for a parallel projection, matching the 2D panel'
+  ];
+
+  if (hiddenChains.size) {
+    lines.push(`hide #1/${[...hiddenChains].sort().join(',')} cartoon atoms`);
+  }
+  if (!showHetatm) lines.push('hide #1 & ~protein & ~nucleic atoms');
+
+  return lines.join('\n');
+}
+
+function exportChimeraX() {
+  if (!allAtoms.length) { setStatus('⚠ Load a structure first'); return; }
+  const text = buildChimeraXCommands();
+  const box  = document.getElementById('cxc-text');
+  box.value  = text;
+  document.getElementById('cxc-sub').textContent =
+    'Paste into the ChimeraX command line, or save as a .cxc script. You can also paste a "view matrix" here and hit Apply.';
+  document.getElementById('cxc-modal').style.display = 'flex';
+  box.focus(); box.select();
+}
+
+function copyChimeraX() {
+  const box = document.getElementById('cxc-text');
+  box.select();
+  const done = () => {
+    const btn = document.getElementById('cxc-copy');
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(box.value).then(done, () => { document.execCommand('copy'); done(); });
+  } else {
+    document.execCommand('copy'); done();
+  }
+}
+
+// ── IMPORT: parse ChimeraX "view matrix" output ─────────────────
+//
+//  What lands on screen depends on BOTH matrices.  With models placed by
+//  Rm and the camera oriented by Rc, a point x appears in camera
+//  coordinates as Rc⁻¹(Rm·x + …), so the net orientation is Rc⁻¹·Rm =
+//  Rcᵀ·Rm for a rotation.  Reading only the model matrix would silently
+//  drop any camera rotation, which is exactly what you get if someone
+//  moved the camera rather than the model.
+//
+//  Translations, zoom and clipping are ignored: this viewer rotates the
+//  molecule about its own centroid and has no independent camera.
+function parseChimeraXView(text) {
+  const warn = [];
+  // Drop whole-line comments. Model specs also start with '#', but only
+  // ever mid-line after "models", so leading-# lines are safe to strip.
+  const body = text.split(/\r?\n/).filter(l => !/^\s*#/.test(l)).join('\n');
+
+  const grab = (kw) => {
+    const m = body.match(new RegExp('view\\s+matrix\\s+' + kw + '\\s+([^\\n]+)', 'i'));
+    return m ? m[1].trim() : null;
+  };
+
+  // "#1,n,n,...,#2,n,n,..." → the numbers belonging to the first model.
+  const firstTwelve = (str) => {
+    const out = [];
+    for (const tok of str.split(',')) {
+      const t = tok.trim();
+      if (!t) continue;
+      if (t.startsWith('#')) { if (out.length) break; continue; }
+      const v = parseFloat(t);
+      if (!Number.isFinite(v)) break;
+      out.push(v);
+      if (out.length === 12) break;
+    }
+    return out.length === 12 ? out : null;
+  };
+
+  let modelStr = grab('models?');
+  let camStr   = grab('camera');
+
+  // Also accept a bare list of 12 numbers with no command wrapper.
+  if (!modelStr && !camStr) {
+    const bare = firstTwelve(body.replace(/\s+/g, ','));
+    if (bare) modelStr = bare.join(',');
+  }
+
+  const mNums = modelStr ? firstTwelve(modelStr) : null;
+  const cNums = camStr   ? firstTwelve(camStr)   : null;
+  if (!mNums && !cNums) return { error: 'No "view matrix" numbers found. Paste the output of ChimeraX\'s "view matrix" command.' };
+  if (modelStr && !mNums) warn.push('models matrix was malformed and ignored');
+  if (camStr   && !cNums) warn.push('camera matrix was malformed and ignored');
+
+  const toM4 = (n) => n
+    ? new THREE.Matrix4().set(n[0],n[1],n[2],0, n[4],n[5],n[6],0, n[8],n[9],n[10],0, 0,0,0,1)
+    : new THREE.Matrix4();
+
+  const Rm = toM4(mNums);
+  const Rc = toM4(cNums);
+  // Only worth mentioning if the camera is genuinely rotated — an identity
+  // camera line is normal (this tool's own export writes one).
+  if (cNums) {
+    const c = Rc.elements;
+    const offIdentity = Math.abs(c[0]-1) + Math.abs(c[5]-1) + Math.abs(c[10]-1)
+                      + Math.abs(c[1]) + Math.abs(c[2]) + Math.abs(c[4])
+                      + Math.abs(c[6]) + Math.abs(c[8]) + Math.abs(c[9]);
+    if (offIdentity > 1e-4) warn.push('camera rotation composed with the model matrix');
+  }
+
+  // R = Rcᵀ · Rm
+  const R = Rc.clone().transpose().multiply(Rm);
+  const det = orthonormalize(R);
+  if (det < 0) return { error: 'That matrix has a negative determinant (it mirrors the structure), so it has no rotation equivalent.' };
+  if (Math.abs(det - 1) > 0.05) warn.push(`matrix was not orthonormal (det ${det.toFixed(3)}) — nearest rotation used`);
+
+  return { matrix: R, warn };
+}
+
+// Gram-Schmidt the upper-left 3x3 in place; returns the determinant
+// measured before correction, so callers can judge how bad the input was.
+function orthonormalize(m4) {
+  const e = m4.elements;                       // column-major
+  const col = i => [e[i*4], e[i*4+1], e[i*4+2]];
+  const set = (i, v) => { e[i*4]=v[0]; e[i*4+1]=v[1]; e[i*4+2]=v[2]; };
+  const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+  const sub = (a,b,s) => [a[0]-s*b[0], a[1]-s*b[1], a[2]-s*b[2]];
+  const nrm = a => { const n = Math.hypot(...a); return n > 1e-12 ? [a[0]/n,a[1]/n,a[2]/n] : [0,0,0]; };
+  const crs = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+
+  let c0 = col(0), c1 = col(1), c2 = col(2);
+  const det = dot(c0, crs(c1, c2));
+  c0 = nrm(c0);
+  c1 = nrm(sub(c1, c0, dot(c1, c0)));
+  c2 = crs(c0, c1);
+  if (det < 0) return det;                     // mirrored — let the caller reject it
+  set(0, c0); set(1, c1); set(2, c2);
+  return det;
+}
+
+function applyChimeraX() {
+  if (!allAtoms.length) { setStatus('⚠ Load a structure first'); return; }
+  const res = parseChimeraXView(document.getElementById('cxc-text').value);
+  if (res.error) { setStatus('⚠ ' + res.error); return; }
+
+  molecule.quaternion.setFromRotationMatrix(res.matrix);
+  molecule.position.set(0, 0, 0);
+  computeProjection();
+  closeChimeraX();
+  setStatus('✓ Orientation set from ChimeraX view' + (res.warn.length ? ' — ' + res.warn.join('; ') : ''));
+}
+
+function importChimeraX() {
+  const box = document.getElementById('cxc-text');
+  box.value = '';
+  document.getElementById('cxc-sub').textContent =
+    'Run "view matrix" in ChimeraX and paste the output here, then Apply. Orientation only — position, zoom and clipping are ignored.';
+  document.getElementById('cxc-modal').style.display = 'flex';
+  box.focus();
+}
+
+function closeChimeraX() {
+  document.getElementById('cxc-modal').style.display = 'none';
+}
+
+function saveProjection() {
+  const a = document.createElement('a');
+  a.href = projCanvas.toDataURL('image/png');
+  a.download = 'molproj_projection.png';
+  a.click();
+}
+
+// ════════════════════════════════════════════════════════════
+//  STATUS
+// ════════════════════════════════════════════════════════════
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+}
+
+// ════════════════════════════════════════════════════════════
+//  START
+// ════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
